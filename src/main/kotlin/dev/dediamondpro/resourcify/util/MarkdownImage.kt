@@ -25,6 +25,7 @@ import com.cleanroommc.modularui.widget.WidgetTree
 import dev.dediamondpro.resourcify.VintageResourcify
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.Gui
+import net.minecraft.client.gui.ScaledResolution
 import net.minecraft.client.renderer.texture.DynamicTexture
 import net.minecraft.util.ResourceLocation
 import org.lwjgl.opengl.GL11
@@ -122,8 +123,14 @@ class MarkdownImage(
     }
 
     private fun targetWidth(naturalWidth: Int): Int {
-        val hinted = requestedWidth?.takeIf { it > 0 } ?: naturalWidth
+        val hinted = requestedWidth?.takeIf { it > 0 } ?: imagePixelsToGuiUnits(naturalWidth)
         return hinted.coerceAtMost(maxWidth).coerceAtLeast(1)
+    }
+
+    private fun imagePixelsToGuiUnits(pixels: Int): Int {
+        val mc = Minecraft.getMinecraft()
+        val scale = ScaledResolution(mc, mc.displayWidth, mc.displayHeight).scaleFactor.coerceAtLeast(1)
+        return ((pixels + scale - 1) / scale).coerceAtLeast(1)
     }
 
     private fun scaledHeightFor(targetWidth: Int, naturalWidth: Int, naturalHeight: Int): Int {

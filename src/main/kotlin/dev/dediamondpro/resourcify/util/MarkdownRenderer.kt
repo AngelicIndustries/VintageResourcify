@@ -24,6 +24,7 @@ import com.cleanroommc.modularui.widgets.TextWidget
 import com.cleanroommc.modularui.widgets.layout.Flow
 import dev.dediamondpro.resourcify.config.Config
 import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.ScaledResolution
 import net.minecraft.util.EnumChatFormatting
 import java.net.URL
 import org.commonmark.node.AbstractVisitor
@@ -220,8 +221,9 @@ object MarkdownRenderer {
                     return@forEach
                 }
                 val size = imageSizeHint(entry.image)
-                val requestedWidth = size.width?.coerceAtLeast(1)
-                val widget = MarkdownImage(url, width, entry.linkUrl, requestedWidth, size.height?.coerceAtLeast(1))
+                val requestedWidth = size.width?.let(::imagePixelsToGuiUnits)
+                val requestedHeight = size.height?.let(::imagePixelsToGuiUnits)
+                val widget = MarkdownImage(url, width, entry.linkUrl, requestedWidth, requestedHeight)
                 rendered += RenderedImage(widget, requestedWidth?.coerceAtMost(width) ?: width, requestedWidth != null)
             }
             if (rendered.size > 1 && rendered.all { it.hasFixedWidth }) {
@@ -483,6 +485,13 @@ object MarkdownRenderer {
         val width = titleWidth.find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()?.takeIf { it > 0 }
         val height = titleHeight.find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()?.takeIf { it > 0 }
         return ImageSizeHint(width, height)
+    }
+
+    /** HTML image dimensions are display pixels, not Minecraft scaled-GUI units. */
+    private fun imagePixelsToGuiUnits(pixels: Int): Int {
+        val mc = Minecraft.getMinecraft()
+        val scale = ScaledResolution(mc, mc.displayWidth, mc.displayHeight).scaleFactor.coerceAtLeast(1)
+        return ((pixels + scale - 1) / scale).coerceAtLeast(1)
     }
 
     private fun escapeLabel(value: String): String {
