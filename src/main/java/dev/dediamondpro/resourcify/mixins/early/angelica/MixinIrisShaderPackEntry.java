@@ -37,11 +37,17 @@ public class MixinIrisShaderPackEntry {
         int xGear = xCross - cross - 4;
         boolean hasUpdate = PackOverlayRenderer.INSTANCE.hasAvailableUpdate(folder, file);
         int xUpdate = xGear - cross - 4;
-        int xBadge = (hasUpdate ? xUpdate : xGear) - badge - 4;
+        // Keep the source badge aligned with the other rows while idle. It
+        // only needs to move left when the hovered row exposes the update
+        // button alongside the settings and delete controls.
+        int xBadge = (hasUpdate && isMouseOver ? xUpdate : xGear) - badge - 4;
         int yMid = y - 1;
         String platform = PackOverlayRenderer.INSTANCE.lookupPlatform(folder, file);
         if (platform != null) {
             PackOverlayRenderer.INSTANCE.drawBadge(platform, xBadge, yMid, badge, mouseX, mouseY);
+        }
+        if (hasUpdate && !isMouseOver) {
+            PackOverlayRenderer.INSTANCE.drawUpdateDot(xBadge, yMid, badge);
         }
         if (isMouseOver) {
             // Iris draws the row label at y; the 16px cross visually

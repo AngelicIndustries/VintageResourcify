@@ -81,15 +81,18 @@ public abstract class MixinSwanSongGuiSlotShaders {
         int xGear = xCross - cross - 4;
         boolean hasUpdate = PackOverlayRenderer.INSTANCE.hasAvailableUpdate(folder, file);
         int xUpdate = xGear - cross - 4;
-        int xBadge = (hasUpdate ? xUpdate : xGear) - badge - 6;
+        boolean isMouseOver = this.resourcify$isMouseOverEntry(posX, posY, mouseX, mouseY);
+        int xBadge = (hasUpdate && isMouseOver ? xUpdate : xGear) - badge - 6;
         int yBadge = posY + 1;
         int yCross = posY;
         String platform = PackOverlayRenderer.INSTANCE.lookupPlatform(folder, file);
         if (platform != null) {
             PackOverlayRenderer.INSTANCE.drawBadge(platform, xBadge, yBadge, badge, mouseX, mouseY);
         }
+        if (hasUpdate && !isMouseOver) {
+            PackOverlayRenderer.INSTANCE.drawUpdateDot(xBadge, yBadge, badge);
+        }
 
-        boolean isMouseOver = this.resourcify$isMouseOverEntry(posX, posY, mouseX, mouseY);
         if (isMouseOver) {
             if (hasUpdate) {
                 PackOverlayRenderer.INSTANCE.drawUpdateButton(folder, file, xUpdate, yCross, cross, mouseX, mouseY);
