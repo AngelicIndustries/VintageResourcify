@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import dev.dediamondpro.resourcify.gui.pack.PackOverlayRenderer;
+import dev.dediamondpro.resourcify.services.ProjectType;
 import dev.dediamondpro.resourcify.util.SwanSongHelper;
 
 @Mixin(targets = "com.ventooth.swansong.gui.GuiShaders$GuiSlotShaders")
@@ -73,6 +74,7 @@ public abstract class MixinSwanSongGuiSlotShaders {
         java.io.File folder = SwanSongHelper.INSTANCE.getShaderpacksFolder();
         java.io.File file = PackOverlayRenderer.INSTANCE.shaderPackFile(folder, packName);
         if (file == null) return;
+        folder = file.getParentFile();
 
         int cross = 12;
         int badge = 10;
@@ -95,9 +97,11 @@ public abstract class MixinSwanSongGuiSlotShaders {
 
         if (isMouseOver) {
             if (hasUpdate) {
-                PackOverlayRenderer.INSTANCE.drawUpdateButton(folder, file, xUpdate, yCross, cross, mouseX, mouseY);
+                PackOverlayRenderer.INSTANCE
+                    .drawUpdateButton(folder, file, ProjectType.IRIS_SHADER, xUpdate, yCross, cross, mouseX, mouseY);
             }
-            PackOverlayRenderer.INSTANCE.drawSettingsButton(folder, file, xGear, yCross, cross, mouseX, mouseY);
+            PackOverlayRenderer.INSTANCE
+                .drawSettingsButton(folder, file, ProjectType.IRIS_SHADER, xGear, yCross, cross, mouseX, mouseY);
             PackOverlayRenderer.INSTANCE
                 .drawDeleteButton(folder, file, packName, xCross, yCross, cross, mouseX, mouseY);
         }

@@ -36,6 +36,8 @@ class Config {
     var worldsEnabled: Boolean = true
     var autoUpdateChecks: Boolean = true
     var enableSounds: Boolean = true
+    var additionalResourcePackFolders: MutableList<String> = mutableListOf()
+    var additionalShaderPackFolders: MutableList<String> = mutableListOf()
     var curseUserAgent: String = ""
     var curseApiToken: String = ""
 

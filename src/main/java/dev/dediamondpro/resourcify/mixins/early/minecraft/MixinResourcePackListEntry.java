@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import dev.dediamondpro.resourcify.gui.pack.PackOverlayRenderer;
+import dev.dediamondpro.resourcify.services.ProjectType;
 
 /**
  * Overlay the platform badge in the bottom-right corner of the pack icon for
@@ -49,7 +50,8 @@ public abstract class MixinResourcePackListEntry {
             .func_148318_i();
         java.io.File file = entry.getResourcePackFile();
         if (file == null) return;
-        java.io.File folder = PackOverlayRenderer.INSTANCE.resourcePacksFolder();
+        java.io.File folder = PackOverlayRenderer.INSTANCE.resourcePackFolder(file);
+        if (folder == null) return;
         String platform = PackOverlayRenderer.INSTANCE.lookupPlatform(folder, file);
         boolean hasUpdate = PackOverlayRenderer.INSTANCE.hasAvailableUpdate(folder, file);
         // Badge: only shown for packs we installed (have a platform record).
@@ -75,10 +77,18 @@ public abstract class MixinResourcePackListEntry {
             int cy = y + (slotHeight - cross) / 2 - 2;
             int gearX = cx - cross - 4;
             if (hasUpdate) {
-                PackOverlayRenderer.INSTANCE
-                    .drawUpdateButton(folder, file, gearX - cross - 4, cy, cross, mouseX, mouseY);
+                PackOverlayRenderer.INSTANCE.drawUpdateButton(
+                    folder,
+                    file,
+                    ProjectType.RESOURCE_PACK,
+                    gearX - cross - 4,
+                    cy,
+                    cross,
+                    mouseX,
+                    mouseY);
             }
-            PackOverlayRenderer.INSTANCE.drawSettingsButton(folder, file, gearX, cy, cross, mouseX, mouseY);
+            PackOverlayRenderer.INSTANCE
+                .drawSettingsButton(folder, file, ProjectType.RESOURCE_PACK, gearX, cy, cross, mouseX, mouseY);
             PackOverlayRenderer.INSTANCE.drawDeleteButton(folder, file, file.getName(), cx, cy, cross, mouseX, mouseY);
         }
     }

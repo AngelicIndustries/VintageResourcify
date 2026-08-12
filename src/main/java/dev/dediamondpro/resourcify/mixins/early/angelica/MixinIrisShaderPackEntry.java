@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import dev.dediamondpro.resourcify.gui.pack.PackOverlayRenderer;
+import dev.dediamondpro.resourcify.services.ProjectType;
 
 /**
  * Draw the platform badge near the right edge of an Iris shader pack entry.
@@ -29,6 +30,7 @@ public class MixinIrisShaderPackEntry {
         java.io.File folder = PackOverlayRenderer.INSTANCE.shaderpacksFolder();
         java.io.File file = PackOverlayRenderer.INSTANCE.shaderPackFile(folder, packName);
         if (file == null) return;
+        folder = file.getParentFile();
         int cross = 16;
         int badge = 10;
         // Always reserve cross-width on the right so badge position stays
@@ -55,9 +57,11 @@ public class MixinIrisShaderPackEntry {
             // the diff.
             int yCross = y - 4;
             if (hasUpdate) {
-                PackOverlayRenderer.INSTANCE.drawUpdateButton(folder, file, xUpdate, yCross, cross, mouseX, mouseY);
+                PackOverlayRenderer.INSTANCE
+                    .drawUpdateButton(folder, file, ProjectType.IRIS_SHADER, xUpdate, yCross, cross, mouseX, mouseY);
             }
-            PackOverlayRenderer.INSTANCE.drawSettingsButton(folder, file, xGear, yCross, cross, mouseX, mouseY);
+            PackOverlayRenderer.INSTANCE
+                .drawSettingsButton(folder, file, ProjectType.IRIS_SHADER, xGear, yCross, cross, mouseX, mouseY);
             PackOverlayRenderer.INSTANCE
                 .drawDeleteButton(folder, file, packName, xCross, yCross, cross, mouseX, mouseY);
         }

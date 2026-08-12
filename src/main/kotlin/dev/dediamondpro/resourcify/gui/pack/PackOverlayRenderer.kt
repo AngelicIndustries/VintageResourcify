@@ -18,7 +18,10 @@
 package dev.dediamondpro.resourcify.gui.pack
 
 import dev.dediamondpro.resourcify.VintageResourcify
+import dev.dediamondpro.resourcify.config.Config
 import dev.dediamondpro.resourcify.config.ConfiguredPlatforms
+import dev.dediamondpro.resourcify.services.ProjectType
+import dev.dediamondpro.resourcify.util.AdditionalPackFolders
 import dev.dediamondpro.resourcify.util.ClientGuiTasks
 import dev.dediamondpro.resourcify.util.LocalIndex
 import dev.dediamondpro.resourcify.util.ResourcifySounds
@@ -81,12 +84,12 @@ object PackOverlayRenderer {
 
     private data class SettingsRegion(
         val x1: Int, val y1: Int, val x2: Int, val y2: Int,
-        val folder: File, val file: File,
+        val folder: File, val file: File, val type: ProjectType,
     )
 
     private data class UpdateRegion(
         val x1: Int, val y1: Int, val x2: Int, val y2: Int,
-        val folder: File, val file: File,
+        val folder: File, val file: File, val type: ProjectType,
     )
 
     // Double-buffered to handle Iris's IrisGuiSlot.drawScreen, which pumps
@@ -390,7 +393,7 @@ object PackOverlayRenderer {
     }
 
     fun drawSettingsButton(
-        folder: File, file: File,
+        folder: File, file: File, type: ProjectType,
         x: Int, y: Int, size: Int,
         mouseX: Int, mouseY: Int,
     ) {
@@ -413,7 +416,7 @@ object PackOverlayRenderer {
         } finally {
             GL11.glPopAttrib()
         }
-        settingsScratch.add(SettingsRegion(x, y, x + size, y + size, folder, file))
+        settingsScratch.add(SettingsRegion(x, y, x + size, y + size, folder, file, type))
         if (hovered) {
             pendingTooltipText = localize("resourcify.pack.update_settings")
             pendingTooltipX = mouseX
@@ -422,7 +425,7 @@ object PackOverlayRenderer {
     }
 
     fun drawUpdateButton(
-        folder: File, file: File,
+        folder: File, file: File, type: ProjectType,
         x: Int, y: Int, size: Int,
         mouseX: Int, mouseY: Int,
     ) {
@@ -444,7 +447,7 @@ object PackOverlayRenderer {
         } finally {
             GL11.glPopAttrib()
         }
-        updateScratch.add(UpdateRegion(x, y, x + size, y + size, folder, file))
+        updateScratch.add(UpdateRegion(x, y, x + size, y + size, folder, file, type))
         if (hovered) {
             pendingTooltipText = localize("resourcify.pack.update_now")
             pendingTooltipX = mouseX
@@ -468,12 +471,12 @@ object PackOverlayRenderer {
         if (button != 0) return false
         val updateHit = updateRegionAt(mouseX, mouseY)
         if (updateHit != null) {
-            PackScreensAddition.openDirectUpdate(updateHit.folder, updateHit.file)
+            PackScreensAddition.openDirectUpdate(updateHit.folder, updateHit.file, updateHit.type)
             return true
         }
         val settingsHit = settingsRegionAt(mouseX, mouseY)
         if (settingsHit != null) {
-            PackScreensAddition.openPackSettings(settingsHit.folder, settingsHit.file)
+            PackScreensAddition.openPackSettings(settingsHit.folder, settingsHit.file, settingsHit.type)
             return true
         }
         val hit = deleteRegionAt(mouseX, mouseY) ?: return false
@@ -576,7 +579,12 @@ object PackOverlayRenderer {
             try {
                 val mc = Minecraft.getMinecraft()
                 val shadersFolder = try { ShaderGuiHelper.getShaderpacksFolder() } catch (_: Throwable) { null }
-                if (shadersFolder != null && hit.folder.canonicalPath == shadersFolder.canonicalPath) {
+                val isShaderFolder = shadersFolder != null && AdditionalPackFolders.all(
+                    mc.mcDataDir,
+                    shadersFolder,
+                    Config.instance.additionalShaderPackFolders,
+                ).any { safeCanonical(it) == safeCanonical(hit.folder) }
+                if (isShaderFolder) {
                     // Shader pack delete: ask the active shader GUI backend
                     // to rescan and drop the active pack if it was removed.
                     ShaderGuiHelper.reload()
@@ -657,12 +665,30 @@ object PackOverlayRenderer {
 
     fun resourcePacksFolder(): File = Minecraft.getMinecraft().resourcePackRepository.dirResourcepacks
 
+    fun resourcePackFolder(file: File): File? {
+        val mc = Minecraft.getMinecraft()
+        val primary = mc.resourcePackRepository.dirResourcepacks
+        val folders = AdditionalPackFolders.all(
+            mc.mcDataDir,
+            primary,
+            Config.instance.additionalResourcePackFolders,
+        )
+        return AdditionalPackFolders.containingFolder(file, folders)
+    }
+
     /** Convert a pack name (as Iris uses it - e.g. "MyShader") to the file we recorded under. */
     fun shaderPackFile(folder: File, packName: String): File? {
-        val zip = File(folder, "$packName.zip")
-        if (zip.exists()) return zip
-        val raw = File(folder, packName)
-        if (raw.exists()) return raw
-        return null
+        val mc = Minecraft.getMinecraft()
+        return AdditionalPackFolders.findShaderPackFile(
+            mc.mcDataDir,
+            folder,
+            Config.instance.additionalShaderPackFolders,
+            packName,
+        ) ?: AdditionalPackFolders.findShaderPackFile(
+            mc.mcDataDir,
+            folder,
+            Config.instance.additionalShaderPackFolders,
+            "$packName.zip",
+        )
     }
 }

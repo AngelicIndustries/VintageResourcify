@@ -23,6 +23,8 @@
 * Added resource packs and shader file picker
 * Drag and drop resource packs and shaders onto their respective screens ([lwjgl3ify](github.com/GTNewHorizons/lwjgl3ify) required)
 * Support for adding third party Modrinth instances
+* Additional resource pack folders (ported from Packed Packs)
+* Additional shader pack folders (ported from Packed Packs)
 
 Vintage Resourcify supports Angelica [![curse](images/icons/curse.png)](https://www.curseforge.com/minecraft/mc-mods/angelica)  [![modrinth](images/icons/modrinth.png)](https://modrinth.com/mod/angelica/versions) [![git](images/icons/git.png)](https://github.com/GTNewHorizons/Angelica) and Swansong [![curse](images/icons/curse.png)](https://www.curseforge.com/minecraft/mc-mods/swansong)  [![modrinth](images/icons/modrinth.png)](https://modrinth.com/mod/swansong) [![git](images/icons/git.png)](https://github.com/vfx-dev/SwanSong). 
 
@@ -53,6 +55,7 @@ Vintage Resourcify supports Angelica [![curse](images/icons/curse.png)](https://
 `LGPLv3`.
 
 * [Resourcify assets and code are licensed under GPLv3](https://github.com/DeDiamondPro/Resourcify/blob/master/LICENSE).
+* [All Packed Packs code is licensed under MIT](https://github.com/fishstiz/packed_packs/blob/mc/26.2/LICENSE).
 
 ## Buy me some creatine
 

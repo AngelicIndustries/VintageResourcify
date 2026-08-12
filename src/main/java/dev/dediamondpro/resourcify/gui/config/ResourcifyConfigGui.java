@@ -1,6 +1,7 @@
 package dev.dediamondpro.resourcify.gui.config;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import net.minecraft.client.gui.GuiScreen;
@@ -42,6 +43,34 @@ public class ResourcifyConfigGui extends GuiConfig {
                     super.set(value);
                     Config.Companion.getInstance()
                         .setDebugMode(value);
+                    Config.Companion.save(Config.Companion.getInstance());
+                }
+            });
+        list.add(
+            new JsonStringListElement(
+                "additionalResourcePackFolders",
+                Config.Companion.getInstance()
+                    .getAdditionalResourcePackFolders(),
+                "resourcify.config.additional-resource-pack-folders") {
+
+                @Override
+                protected void saveValues(List<String> values) {
+                    Config.Companion.getInstance()
+                        .setAdditionalResourcePackFolders(new ArrayList<>(values));
+                    Config.Companion.save(Config.Companion.getInstance());
+                }
+            });
+        list.add(
+            new JsonStringListElement(
+                "additionalShaderPackFolders",
+                Config.Companion.getInstance()
+                    .getAdditionalShaderPackFolders(),
+                "resourcify.config.additional-shader-pack-folders") {
+
+                @Override
+                protected void saveValues(List<String> values) {
+                    Config.Companion.getInstance()
+                        .setAdditionalShaderPackFolders(new ArrayList<>(values));
                     Config.Companion.save(Config.Companion.getInstance());
                 }
             });
@@ -127,5 +156,27 @@ public class ResourcifyConfigGui extends GuiConfig {
                 }
             });
         return list;
+    }
+
+    /** Forge's array editor passes Object[], even for STRING lists. Avoid the String[] bridge cast. */
+    private abstract static class JsonStringListElement extends DummyConfigElement.DummyListElement<Object> {
+
+        JsonStringListElement(String name, List<String> values, String langKey) {
+            super(name, values.toArray(), ConfigGuiType.STRING, langKey);
+        }
+
+        @Override
+        public void set(Object[] values) {
+            Object[] copy = Arrays.copyOf(values, values.length);
+            super.set(copy);
+            this.values = copy;
+            List<String> strings = new ArrayList<>(copy.length);
+            for (Object value : copy) {
+                if (value != null) strings.add(value.toString());
+            }
+            saveValues(strings);
+        }
+
+        protected abstract void saveValues(List<String> values);
     }
 }

@@ -29,6 +29,7 @@ import dev.dediamondpro.resourcify.services.DistributionPolicy
 import dev.dediamondpro.resourcify.services.IVersion
 import dev.dediamondpro.resourcify.services.ProjectType
 import dev.dediamondpro.resourcify.services.ServiceRegistry
+import dev.dediamondpro.resourcify.util.AdditionalPackFolders
 import dev.dediamondpro.resourcify.util.DownloadManager
 import dev.dediamondpro.resourcify.util.DownloadResult
 import dev.dediamondpro.resourcify.util.LocalIndex
@@ -127,7 +128,7 @@ object PackScreensAddition {
     private val updateEntries = mutableListOf<UpdateEntry>()
 
     fun onRender(type: ProjectType, folder: File, screen: GuiScreen, mouseX: Int, mouseY: Int) {
-        pruneIfFirstSeen(screen, folder)
+        pruneIfFirstSeen(screen, type, folder)
         if (type.hasUpdateButton && Config.instance.autoUpdateChecks) {
             autoCheckIfFirstSeen(screen, type, folder)
         }
@@ -321,13 +322,8 @@ object PackScreensAddition {
         return true
     }
 
-    fun openPackSettings(folder: File, file: File) {
+    fun openPackSettings(folder: File, file: File, type: ProjectType) {
         val entry = LocalIndex.forFolder(folder).lookupByFileName(file) ?: return
-        val type = if (sameFile(folder, Minecraft.getMinecraft().resourcePackRepository.dirResourcepacks)) {
-            ProjectType.RESOURCE_PACK
-        } else {
-            ProjectType.IRIS_SHADER
-        }
         updatePanelOpen = false
         directUpdateOpen = false
         packSettingsOpen = true
@@ -352,18 +348,13 @@ object PackScreensAddition {
         }
     }
 
-    fun openDirectUpdate(folder: File, file: File) {
+    fun openDirectUpdate(folder: File, file: File, type: ProjectType) {
         val entry = synchronized(updateLock) {
             updateEntries.firstOrNull {
                 sameFile(it.oldFile, file) && it.version != null &&
                     it.status != UpdateStatus.UPDATED && it.status != UpdateStatus.UPDATING
             }
         } ?: return
-        val type = if (sameFile(folder, Minecraft.getMinecraft().resourcePackRepository.dirResourcepacks)) {
-            ProjectType.RESOURCE_PACK
-        } else {
-            ProjectType.IRIS_SHADER
-        }
         playDefaultButtonSound()
         updatePanelOpen = false
         packSettingsOpen = false
@@ -380,7 +371,7 @@ object PackScreensAddition {
             else -> false
         }
         Thread({
-            val result = performUpdate(PreparedUpdate(entry, wasEnabled), type, folder)
+            val result = performUpdate(PreparedUpdate(entry, wasEnabled), type)
             entry.status = result
             directUpdateStatus = statusLabel(entry)
             if (result == UpdateStatus.UPDATED) {
@@ -393,15 +384,17 @@ object PackScreensAddition {
         }, "Resourcify-DirectPackUpdate").apply { isDaemon = true }.start()
     }
 
-    private fun pruneIfFirstSeen(screen: GuiScreen, folder: File) {
+    private fun pruneIfFirstSeen(screen: GuiScreen, type: ProjectType, folder: File) {
         synchronized(prunedScreens) {
             if (!prunedScreens.add(screen)) return
         }
-        try {
-            val removed = LocalIndex.forFolder(folder).prune()
-            if (removed > 0) VintageResourcify.LOG.info("Pruned {} stale install index entries in {}", removed, folder)
-        } catch (e: Throwable) {
-            VintageResourcify.LOG.warn("Index prune failed for {}", folder, e)
+        for (packFolder in packFolders(type, folder)) {
+            try {
+                val removed = LocalIndex.forFolder(packFolder).prune()
+                if (removed > 0) VintageResourcify.LOG.info("Pruned {} stale install index entries in {}", removed, packFolder)
+            } catch (e: Throwable) {
+                VintageResourcify.LOG.warn("Index prune failed for {}", packFolder, e)
+            }
         }
     }
 
@@ -562,14 +555,19 @@ object PackScreensAddition {
     }
 
     private fun scanUpdates(type: ProjectType, folder: File): List<UpdateEntry> {
-        val index = LocalIndex.forFolder(folder)
-        val tracked = index.listEntries()
-            .mapNotNull { entry -> File(folder, entry.fileName).takeIf { it.exists() }?.let { it to entry } }
+        val seenNames = mutableSetOf<String>()
+        val tracked = packFolders(type, folder).flatMap { packFolder ->
+            val index = LocalIndex.forFolder(packFolder)
+            index.listEntries().mapNotNull { entry ->
+                val file = File(packFolder, entry.fileName)
+                file.takeIf { it.exists() && seenNames.add(it.name) }?.let { TrackedPack(packFolder, it, entry) }
+            }
+        }
         if (tracked.isEmpty()) return emptyList()
 
         val results = mutableListOf<UpdateEntry>()
         val currentMcVersion = Platform.getMcVersion()
-        val byQuery = tracked.groupBy { UpdateQuery(it.second.platform, it.second.updateTrack) }
+        val byQuery = tracked.groupBy { UpdateQuery(it.localEntry.platform, it.localEntry.updateTrack) }
         for ((query, items) in byQuery) {
             val platform = query.platform
             if (!DistributionPolicy.canDownloadFrom(platform)) {
@@ -583,14 +581,15 @@ object PackScreensAddition {
                 continue
             }
             val map = try {
-                service.getUpdates(items.map { it.first }, type, query.minecraftVersion).join()
+                service.getUpdates(items.map { it.file }, type, query.minecraftVersion).join()
             } catch (e: Throwable) {
                 VintageResourcify.LOG.warn("getUpdates failed for {}", service.getName(), e)
                 continue
             }
             for ((file, version) in map) {
                 if (version == null) continue
-                val localEntry = items.firstOrNull { sameFile(it.first, file) }?.second ?: continue
+                val trackedPack = items.firstOrNull { sameFile(it.file, file) } ?: continue
+                val localEntry = trackedPack.localEntry
                 if (!isNewerThanInstalled(version, localEntry)) continue
                 val signature = LocalIndex.versionSignature(platform, version)
                 val ignored = signature == localEntry.ignoredVersion ||
@@ -600,7 +599,7 @@ object PackScreensAddition {
                     currentMcVersion in version.getMinecraftVersions() -> UpdateDisposition.SAFE
                     else -> UpdateDisposition.REVIEW
                 }
-                results.add(UpdateEntry(file, version, localEntry, disposition))
+                results.add(UpdateEntry(trackedPack.folder, file, version, localEntry, disposition))
             }
         }
         return results.sortedWith(compareBy<UpdateEntry> { it.disposition.sortOrder }
@@ -977,9 +976,9 @@ object PackScreensAddition {
         settingsStatus = localize("resourcify.pack_settings.up_to_date")
     }
 
-    private fun ignoreCombinedUpdate(entry: UpdateEntry, folder: File) {
+    private fun ignoreCombinedUpdate(entry: UpdateEntry) {
         val version = entry.version ?: return
-        LocalIndex.forFolder(folder).ignoreVersion(entry.oldFile.name, entry.localEntry.platform, version)
+        LocalIndex.forFolder(entry.folder).ignoreVersion(entry.oldFile.name, entry.localEntry.platform, version)
         synchronized(updateLock) { updateEntries.remove(entry) }
         refreshCachedUpdateStatus()
     }
@@ -1011,7 +1010,8 @@ object PackScreensAddition {
                 } else {
                     UpdateDisposition.REVIEW
                 }
-                updateEntries.add(UpdateEntry(file, candidate, localEntry, disposition))
+                val packFolder = file.parentFile ?: return@synchronized
+                updateEntries.add(UpdateEntry(packFolder, file, candidate, localEntry, disposition))
                 updateEntries.sortWith(compareBy<UpdateEntry> { it.disposition.sortOrder }
                     .thenBy { it.oldFile.name.lowercase(Locale.ROOT) })
             }
@@ -1054,9 +1054,9 @@ object PackScreensAddition {
         val disposition = if (Platform.getMcVersion() in candidate.getMinecraftVersions()) {
             UpdateDisposition.SAFE
         } else UpdateDisposition.REVIEW
-        val updateEntry = UpdateEntry(file, candidate, localEntry, disposition)
+        val updateEntry = UpdateEntry(folder, file, candidate, localEntry, disposition)
         Thread({
-            val result = performUpdate(PreparedUpdate(updateEntry, wasEnabled), type, folder)
+            val result = performUpdate(PreparedUpdate(updateEntry, wasEnabled), type)
             settingsUpdating = false
             settingsStatus = when (result) {
                 UpdateStatus.UPDATED -> localize("resourcify.pack_updates.status.updated")
@@ -1374,7 +1374,7 @@ object PackScreensAddition {
                 entry.version != null &&
                 isInside(mouseX, mouseY, ignoreX, buttonY, BUTTON_SIZE, BUTTON_SIZE)) {
                 playDefaultButtonSound()
-                ignoreCombinedUpdate(entry, folder)
+                ignoreCombinedUpdate(entry)
                 return true
             }
             if (entry.status != UpdateStatus.UPDATED &&
@@ -1447,7 +1447,7 @@ object PackScreensAddition {
                     updateTotal,
                     item.entry.oldFile.name,
                 )
-                val result = performUpdate(item, type, folder)
+                val result = performUpdate(item, type)
                 item.entry.status = result
                 when (result) {
                     UpdateStatus.UPDATED -> updated++
@@ -1473,8 +1473,9 @@ object PackScreensAddition {
         }, "Resourcify-PackUpdate").apply { isDaemon = true }.start()
     }
 
-    private fun performUpdate(item: PreparedUpdate, type: ProjectType, folder: File): UpdateStatus {
+    private fun performUpdate(item: PreparedUpdate, type: ProjectType): UpdateStatus {
         val entry = item.entry
+        val folder = entry.folder
         val version = entry.version ?: return UpdateStatus.FAILED
         val url = version.getDownloadUrl() ?: return UpdateStatus.FAILED
         val newFile = File(folder, version.getFileName())
@@ -1911,13 +1912,13 @@ object PackScreensAddition {
     private fun matchesSettings(type: ProjectType, folder: File): Boolean {
         val currentType = settingsType ?: return false
         val currentFolder = settingsFolder ?: return false
-        return currentType == type && sameFile(currentFolder, folder)
+        return currentType == type && packFolders(type, folder).any { sameFile(currentFolder, it) }
     }
 
     private fun matchesDirectUpdate(type: ProjectType, folder: File): Boolean {
         val currentType = directUpdateType ?: return false
         val currentFolder = directUpdateFolder ?: return false
-        return currentType == type && sameFile(currentFolder, folder)
+        return currentType == type && packFolders(type, folder).any { sameFile(currentFolder, it) }
     }
 
     private fun isPanelVisibleOnCurrentScreen(): Boolean {
@@ -1937,15 +1938,25 @@ object PackScreensAddition {
     private fun isSettingsVisibleOnCurrentScreen(): Boolean {
         val screen = Minecraft.getMinecraft().currentScreen ?: return false
         val type = settingsType ?: return false
-        val folder = settingsFolder ?: return false
+        settingsFolder ?: return false
         return when (type) {
             ProjectType.RESOURCE_PACK, ProjectType.AYCY_RESOURCE_PACK ->
-                screen is GuiScreenResourcePacks &&
-                    sameFile(folder, Minecraft.getMinecraft().resourcePackRepository.dirResourcepacks)
+                screen is GuiScreenResourcePacks
             ProjectType.IRIS_SHADER, ProjectType.OPTIFINE_SHADER ->
-                ShaderGuiHelper.isShaderPackScreen(screen) && sameFile(folder, ShaderGuiHelper.getShaderpacksFolder(screen))
+                ShaderGuiHelper.isShaderPackScreen(screen)
             else -> false
         }
+    }
+
+    private fun packFolders(type: ProjectType, primaryFolder: File): List<File> {
+        val configured = when (type) {
+            ProjectType.RESOURCE_PACK,
+            ProjectType.AYCY_RESOURCE_PACK -> Config.instance.additionalResourcePackFolders
+            ProjectType.IRIS_SHADER,
+            ProjectType.OPTIFINE_SHADER -> Config.instance.additionalShaderPackFolders
+            else -> emptyList()
+        }
+        return AdditionalPackFolders.all(Minecraft.getMinecraft().mcDataDir, primaryFolder, configured)
     }
 
     private fun isInsideUpdateBadge(mouseX: Int, mouseY: Int, buttonX: Int, buttonY: Int, count: Int): Boolean {
@@ -2133,7 +2144,10 @@ object PackScreensAddition {
 
     private data class UpdateQuery(val platform: String, val minecraftVersion: String?)
 
+    private data class TrackedPack(val folder: File, val file: File, val localEntry: LocalIndex.Entry)
+
     private data class UpdateEntry(
+        val folder: File,
         val oldFile: File,
         @Volatile var version: IVersion?,
         @Volatile var localEntry: LocalIndex.Entry,

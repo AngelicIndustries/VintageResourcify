@@ -43,6 +43,10 @@ public class Mixins extends FentMixins {
             .side(Side.CLIENT)
             .phase(Phase.EARLY)
             .build();
+        registry.mixin("MixinResourcePackRepository")
+            .side(Side.CLIENT)
+            .phase(Phase.EARLY)
+            .build();
         // Angelica ships Iris's ShaderPackScreen. Only inject when angelica
         // is loaded - the mixin target class is otherwise absent and the
         // mixin processor would refuse to apply.
@@ -61,12 +65,27 @@ public class Mixins extends FentMixins {
             .side(Side.CLIENT)
             .phase(Phase.EARLY)
             .build();
+        registry.mixin("MixinIrisShaderpackDirectoryManager")
+            .modid("angelica")
+            .side(Side.CLIENT)
+            .phase(Phase.EARLY)
+            .build();
+        registry.mixin("MixinIrisAdditionalShaderFolders")
+            .modid("angelica")
+            .side(Side.CLIENT)
+            .phase(Phase.EARLY)
+            .build();
         registry.mixin("MixinSwanSongGuiShaders")
             .modid("swansong")
             .side(Side.CLIENT)
             .phase(Phase.EARLY)
             .build();
         registry.mixin("MixinSwanSongGuiSlotShaders")
+            .modid("swansong")
+            .side(Side.CLIENT)
+            .phase(Phase.EARLY)
+            .build();
+        registry.mixin("MixinSwanSongShaderPackManager")
             .modid("swansong")
             .side(Side.CLIENT)
             .phase(Phase.EARLY)
