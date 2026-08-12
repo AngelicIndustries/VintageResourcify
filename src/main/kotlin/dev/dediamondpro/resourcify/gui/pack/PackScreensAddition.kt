@@ -175,12 +175,11 @@ object PackScreensAddition {
                 tooltip = updateTooltip(type, folder).takeIf { topButtonTooltipEnabled },
             )
             val count = badgeCount(type, folder)
-            if (count > 0) {
-                drawUpdateBadge(upX, upY, count)
-            }
             val reviews = reviewCount(type, folder)
             if (reviews > 0) {
-                drawReviewBadge(upX, upY, count > 0)
+                drawReviewBadge(upX, upY, false)
+            } else if (count > 0) {
+                drawUpdateBadge(upX, upY, count)
             }
         }
 
@@ -226,9 +225,11 @@ object PackScreensAddition {
 
         if (!type.hasUpdateButton) return false
         val up = updateOrigin() ?: return false
+        val reviews = reviewCount(type, folder)
+        val safeUpdates = badgeCount(type, folder)
         if (isInside(mouseX, mouseY, up.first, up.second, BUTTON_SIZE, BUTTON_SIZE) ||
-            isInsideUpdateBadge(mouseX, mouseY, up.first, up.second, badgeCount(type, folder)) ||
-            isInsideReviewBadge(mouseX, mouseY, up.first, up.second, reviewCount(type, folder), badgeCount(type, folder) > 0)) {
+            (reviews > 0 && isInsideReviewBadge(mouseX, mouseY, up.first, up.second, reviews, false)) ||
+            (reviews == 0 && isInsideUpdateBadge(mouseX, mouseY, up.first, up.second, safeUpdates))) {
             playDefaultButtonSound()
             openUpdatePanel(type, folder)
             if (!checkInProgress && shouldRefreshOnOpen()) {
@@ -650,11 +651,13 @@ object PackScreensAddition {
                 null
             }
             if (token != settingsRequestToken || !packSettingsOpen) return@Thread
+            val currentMinecraftVersion = Platform.getMcVersion()
             val versions = (versionNames.keys + entry.minecraftVersions.orEmpty() +
-                listOfNotNull(entry.updateTrack, Platform.getMcVersion())).distinct()
+                listOfNotNull(entry.updateTrack, currentMinecraftVersion)).distinct()
                 .sortedWith(Comparator(::compareMinecraftVersionsDesc))
             settingsTrackNames = versionNames
-            settingsTrackOptions = listOf<String?>(null) + versions
+            settingsTrackOptions = listOf<String?>(null, currentMinecraftVersion) +
+                versions.filterNot { it == currentMinecraftVersion }
             settingsDropdownScroll = settingsDropdownScroll.coerceIn(
                 0,
                 (settingsTrackOptions.size - SETTINGS_DROPDOWN_ROWS).coerceAtLeast(0),
@@ -687,7 +690,10 @@ object PackScreensAddition {
         settingsFile?.let { PackOverlayRenderer.drawPackIcon(it, layout.panelX + PANEL_PADDING, layout.panelY + 7, 32) }
         val headingX = layout.panelX + PANEL_PADDING + 40
         fr.drawString(localize("resourcify.pack_settings.title"), headingX, layout.panelY + 9, style.textPrimary, false)
-        fr.drawString(trimToWidth(fr, fileName, layout.panelW - PANEL_PADDING * 2 - 40), headingX, layout.panelY + 21, style.textSecondary, false)
+        val installedVersion = settingsEntry?.let { LocalIndex.installedVersionLabel(it) }
+            ?: localize("resourcify.common.unknown")
+        val subtitle = "${localize("resourcify.pack_settings.installed_version", installedVersion)}  •  $fileName"
+        fr.drawString(trimToWidth(fr, subtitle, layout.panelW - PANEL_PADDING * 2 - 40), headingX, layout.panelY + 21, style.textSecondary, false)
 
         fr.drawString(localize("resourcify.pack_settings.track_label"), layout.panelX + PANEL_PADDING, layout.trackY + 7, style.textSecondary, false)
         val track = settingsEntry?.updateTrack

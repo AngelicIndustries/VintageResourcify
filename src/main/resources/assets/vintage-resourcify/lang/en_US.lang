@@ -167,6 +167,7 @@ resourcify.pack.delete_warning=This will remove the file from disk.
 resourcify.pack.update_settings=Updates setting
 resourcify.pack.update_now=Update now
 resourcify.pack_settings.title=Pack update settings
+resourcify.pack_settings.installed_version=Installed version: %s
 resourcify.pack_settings.track_label=Minecraft version
 resourcify.pack_settings.latest_release=Latest release (any Minecraft version)
 resourcify.pack_settings.updates_tab=Updates

@@ -1,8 +1,11 @@
 package dev.dediamondpro.resourcify.mixins.early.angelica;
 
+import net.coderbot.iris.gui.element.ShaderPackSelectionList;
 import net.minecraft.client.gui.GuiScreen;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -19,7 +22,22 @@ import dev.dediamondpro.resourcify.util.IrisHelper;
  * time - it's a runtimeOnly dep.
  */
 @Mixin(targets = "net.coderbot.iris.gui.screen.ShaderPackScreen")
-public class MixinShaderPackScreen {
+public class MixinShaderPackScreen extends GuiScreen {
+
+    @Shadow(remap = false)
+    private ShaderPackSelectionList shaderPackList;
+
+    @Unique
+    private int resourcify$refreshTimer;
+
+    @Override
+    public void updateScreen() {
+        super.updateScreen();
+        if (++this.resourcify$refreshTimer >= 100) {
+            this.resourcify$refreshTimer = 0;
+            if (this.shaderPackList != null) this.shaderPackList.refresh();
+        }
+    }
 
     @Inject(method = "drawScreen", at = @At("HEAD"))
     private void resourcify$resetDeleteRegions(int mouseX, int mouseY, float partialTicks, CallbackInfo ci) {

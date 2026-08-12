@@ -1,13 +1,22 @@
 package dev.dediamondpro.resourcify.mixins.early.minecraft;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiOptionButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiScreenResourcePacks;
 import net.minecraft.client.resources.I18n;
+import net.minecraft.client.resources.ResourcePackListEntry;
+import net.minecraft.client.resources.ResourcePackListEntryFound;
+import net.minecraft.client.resources.ResourcePackRepository;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -25,8 +34,18 @@ public class MixinGuiScreenResourcePacks extends GuiScreen {
     private static final int ACTION_BUTTON_WIDTH = 72;
     private static final int ACTION_BUTTON_GAP = 6;
 
+    @Shadow
+    private List<ResourcePackListEntry> field_146966_g;
+
+    @Shadow
+    private List<ResourcePackListEntry> field_146969_h;
+
+    @Unique
+    private int resourcify$refreshTimer;
+
     @Inject(method = "initGui", at = @At("TAIL"))
     private void resourcify$addCancelButton(CallbackInfo ci) {
+        this.resourcify$refreshTimer = 0;
         int cancelX = this.width / 2 + 4;
         int doneX = cancelX + ACTION_BUTTON_WIDTH + ACTION_BUTTON_GAP;
 
@@ -46,6 +65,33 @@ public class MixinGuiScreenResourcePacks extends GuiScreen {
                 ACTION_BUTTON_WIDTH,
                 20,
                 I18n.format("gui.cancel", new Object[0])));
+    }
+
+    @Override
+    public void updateScreen() {
+        super.updateScreen();
+        if (++this.resourcify$refreshTimer < 100) return;
+        this.resourcify$refreshTimer = 0;
+
+        // Rebuild only the available side. This preserves unsaved choices and
+        // ordering on the selected side while still noticing files added or
+        // removed outside the game.
+        ResourcePackRepository repository = this.mc.getResourcePackRepository();
+        repository.updateRepositoryEntriesAll();
+        Set<String> selectedNames = new HashSet<>();
+        for (ResourcePackListEntry listEntry : this.field_146969_h) {
+            if (listEntry instanceof ResourcePackListEntryFound) {
+                selectedNames.add(
+                    ((ResourcePackListEntryFound) listEntry).func_148318_i()
+                        .getResourcePackName());
+            }
+        }
+        this.field_146966_g.clear();
+        for (ResourcePackRepository.Entry entry : repository.getRepositoryEntriesAll()) {
+            if (!selectedNames.contains(entry.getResourcePackName())) {
+                this.field_146966_g.add(new ResourcePackListEntryFound((GuiScreenResourcePacks) (Object) this, entry));
+            }
+        }
     }
 
     @Inject(method = "actionPerformed", at = @At("HEAD"), cancellable = true)

@@ -52,6 +52,7 @@ import dev.dediamondpro.resourcify.services.ProjectType
 import dev.dediamondpro.resourcify.services.ServiceRegistry
 import dev.dediamondpro.resourcify.util.AsyncIcon
 import dev.dediamondpro.resourcify.util.ClientGuiTasks
+import dev.dediamondpro.resourcify.util.InstalledPackLookup
 import dev.dediamondpro.resourcify.util.formatCompact
 import dev.dediamondpro.resourcify.util.localize
 import dev.dediamondpro.resourcify.util.MultiThreading
@@ -670,9 +671,13 @@ private fun buildCard(
     // wrapping a long title onto a second line that collides with the author
     // row, so trim explicitly. Bold glyphs are ~1px wider, so we measure
     // against the bold-formatted string.
+    val installed = InstalledPackLookup.projectEntries(type, packsFolder, platformId, project.getId()).isNotEmpty()
+    val installedLabel = "(${localize("resourcify.version.installed")})"
+    val installedWidth = if (installed) (fr?.getStringWidth(installedLabel) ?: installedLabel.length * 6) + 4 else 0
     val rawTitle = project.getName()
-    val title = if (fr != null && fr.getStringWidth("§l$rawTitle") > summaryW) {
-        fr.trimStringToWidth("§l$rawTitle", (summaryW - fr.getStringWidth("...")).coerceAtLeast(20))
+    val titleNameWidth = (summaryW - installedWidth).coerceAtLeast(20)
+    val titleName = if (fr != null && fr.getStringWidth("§l$rawTitle") > titleNameWidth) {
+        fr.trimStringToWidth("§l$rawTitle", (titleNameWidth - fr.getStringWidth("...")).coerceAtLeast(20))
             .removePrefix("§l") + "..."
     } else rawTitle
     // Author + downloads: same hard single-line treatment as the title. The
@@ -691,6 +696,22 @@ private fun buildCard(
     val iconTop = (CARD_HEIGHT - ICON_SIZE) / 2
     val textBlockH = 36
     val textTop = (CARD_HEIGHT - textBlockH) / 2
+    val installedWidget = TextWidget(IKey.str(installedLabel))
+        .height(10)
+        .color(style.textSecondary)
+        .alignment(com.cleanroommc.modularui.utils.Alignment.CenterLeft)
+    installedWidget.setEnabled(installed)
+    val titleLine = Flow.row()
+        .top(textTop).left(textLeft).right(INNER_PAD).height(10)
+        .childPadding(4)
+        .collapseDisabledChild()
+        .child(
+            TextWidget(IKey.str(titleName).style(EnumChatFormatting.BOLD))
+                .height(10).maxWidth(titleNameWidth)
+                .color(style.textPrimary)
+                .alignment(com.cleanroommc.modularui.utils.Alignment.CenterLeft)
+        )
+        .child(installedWidget)
     val content = NonHoverableContainer()
         .widthRel(1f).heightRel(1f)
         .sodiumTransparent()
@@ -698,12 +719,7 @@ private fun buildCard(
             AsyncIcon(project.getIconUrl(), ICON_SIZE)
                 .top(iconTop).left(INNER_PAD)
         )
-        .child(
-            TextWidget(IKey.str(title).style(EnumChatFormatting.BOLD))
-                .top(textTop).left(textLeft).right(INNER_PAD).height(10)
-                .color(style.textPrimary)
-                .alignment(com.cleanroommc.modularui.utils.Alignment.CenterLeft)
-        )
+        .child(titleLine)
         .child(
             TextWidget(IKey.str(authorLine))
                 .top(textTop + 11).left(textLeft).right(INNER_PAD).height(9)

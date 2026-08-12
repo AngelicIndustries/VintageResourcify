@@ -217,5 +217,14 @@ class LocalIndex private constructor(private val folder: File) {
             version.getVersionNumber().orEmpty(),
             version.getName(),
         ).joinToString("\u001F")
+
+        /** Human-readable version retained inside the stable install signature. */
+        fun installedVersionLabel(entry: Entry): String? {
+            val parts = entry.installedVersion?.split('\u001F') ?: return null
+            if (parts.size < 6) return null
+            return parts[4].takeIf { it.isNotBlank() }
+                ?: parts[5].takeIf { it.isNotBlank() }
+                ?: parts[2].takeIf { it.isNotBlank() }
+        }
     }
 }

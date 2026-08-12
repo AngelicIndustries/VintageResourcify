@@ -35,7 +35,7 @@ public class MixinIrisShaderPackEntry {
         int badge = 10;
         // Always reserve cross-width on the right so badge position stays
         // stable whether or not the row is hovered.
-        int xCross = x + listWidth - cross - 2;
+        int xCross = x + listWidth - cross - 10;
         int xGear = xCross - cross - 4;
         boolean hasUpdate = PackOverlayRenderer.INSTANCE.hasAvailableUpdate(folder, file);
         int xUpdate = xGear - cross - 4;

@@ -58,6 +58,7 @@ import dev.dediamondpro.resourcify.util.AsyncIcon
 import dev.dediamondpro.resourcify.util.formatCompact
 import dev.dediamondpro.resourcify.util.DownloadManager
 import dev.dediamondpro.resourcify.util.DownloadResult
+import dev.dediamondpro.resourcify.util.InstalledPackLookup
 import dev.dediamondpro.resourcify.util.LocalIndex
 import dev.dediamondpro.resourcify.util.MarkdownRenderer
 import dev.dediamondpro.resourcify.util.ResourcifySounds
@@ -406,6 +407,15 @@ class ProjectScreen(
         .sodiumTransparent()
     val selectedMcVersion = arrayOf<String?>(initialMcVersion)
     val allVersions = arrayOf<List<IVersion>>(emptyList())
+    val installedProject = booleanArrayOf(false)
+    val refreshVersionsHolder = arrayOf<(() -> Unit)?>(null)
+
+    fun installedEntries(): List<LocalIndex.Entry> = InstalledPackLookup.projectEntries(
+        type,
+        packsFolder,
+        platformId,
+        project.getId(),
+    )
 
     // Compute exact pixel column widths up front so both loadVersions and
     // loadDescription can reference them. Mixing widthRel for two siblings
@@ -523,6 +533,8 @@ class ProjectScreen(
                 }
                 downloadedFile[0] = target
                 setDownloadState(DownloadPanelState.DONE, localize("resourcify.download.complete"))
+                installedProject[0] = true
+                refreshVersionsHolder[0]?.invoke()
                 playDownloadChime()
             }
         }
@@ -620,6 +632,7 @@ class ProjectScreen(
 
     fun renderVersions() {
         versionsList.removeAll()
+        val projectInstalls = installedEntries()
         val selected = selectedMcVersion[0]
         val matching = if (selected == null) allVersions[0]
         else allVersions[0].filter { it.getMinecraftVersions().contains(selected) }
@@ -641,11 +654,15 @@ class ProjectScreen(
         val fr = Minecraft.getMinecraft().fontRenderer
         matching.forEach { version: IVersion ->
             val rawName = version.getName()
-            val truncated = fr != null && fr.getStringWidth(rawName) > nameW
+            val installed = InstalledPackLookup.isVersionInstalled(projectInstalls, platformId, version)
+            val installedSuffix = if (installed) " §7(${localize("resourcify.version.installed")})§r" else ""
+            val installedSuffixWidth = if (fr != null) fr.getStringWidth(installedSuffix) else 0
+            val versionNameW = (nameW - installedSuffixWidth).coerceAtLeast(20)
+            val truncated = fr != null && fr.getStringWidth(rawName) > versionNameW
             val displayName = if (truncated)
-                fr.trimStringToWidth(rawName, nameW - fr.getStringWidth("...")) + "..."
+                fr.trimStringToWidth(rawName, (versionNameW - fr.getStringWidth("...")).coerceAtLeast(10)) + "..."
             else rawName
-            val nameWidget = TextWidget(IKey.str(displayName))
+            val nameWidget = TextWidget(IKey.str(displayName + installedSuffix))
                 .left(nameLeft).width(nameW).heightRel(1f)
                 .color(accent)
                 .alignment(com.cleanroommc.modularui.utils.Alignment.CenterLeft)
@@ -660,7 +677,7 @@ class ProjectScreen(
                     SimpleButton()
                         .size(buttonW, 16).right(buttonRightInset).top(3)
                         .sodiumButton(style)
-                        .overlay(IKey.str(localize("resourcify.version.install")))
+                        .overlay(IKey.str(localize("resourcify.download.download")))
                         .onMousePressed { btn ->
                             if (btn == 0) {
                                 openDownloadPanel(version)
@@ -671,6 +688,7 @@ class ProjectScreen(
             versionsList.child(row)
         }
     }
+    refreshVersionsHolder[0] = ::renderVersions
 
     fun loadVersions() {
         project.getVersions().whenComplete { versions, error ->
@@ -820,7 +838,14 @@ class ProjectScreen(
     } else {
         font.trimStringToWidth(authorText, (authorLineWidth - font.getStringWidth("...")).coerceAtLeast(0)) + "..."
     }
-    val header = TextWidget(IKey.str(project.getName()).style(EnumChatFormatting.BOLD).scale(1.5f))
+    installedProject[0] = installedEntries().isNotEmpty()
+    val header = TextWidget(IKey.dynamic {
+        if (installedProject[0]) {
+            "§l${project.getName()}§r §7(${localize("resourcify.version.installed")})§r"
+        } else {
+            "§l${project.getName()}§r"
+        }
+    }).scale(1.5f)
         .top(GUTTER).left(textLeft)
         .color(accent)
     val authorLine = TextWidget(IKey.str(displayedAuthorText))

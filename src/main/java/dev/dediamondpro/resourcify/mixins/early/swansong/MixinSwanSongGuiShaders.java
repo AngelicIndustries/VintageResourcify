@@ -4,7 +4,9 @@ import net.minecraft.client.gui.GuiScreen;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
@@ -15,6 +17,11 @@ import dev.dediamondpro.resourcify.util.SwanSongHelper;
 
 @Mixin(targets = "com.ventooth.swansong.gui.GuiShaders")
 public class MixinSwanSongGuiShaders {
+
+    @ModifyConstant(method = "updateScreen", constant = @Constant(intValue = 20), require = 1)
+    private int resourcify$refreshShaderPacksEveryFiveSeconds(int original) {
+        return 100;
+    }
 
     @Inject(method = "drawScreen", at = @At("HEAD"))
     private void resourcify$resetDeleteRegions(int mouseX, int mouseY, float partialTicks, CallbackInfo ci) {
