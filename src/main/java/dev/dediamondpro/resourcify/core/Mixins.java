@@ -39,6 +39,10 @@ public class Mixins extends FentMixins {
             .side(Side.CLIENT)
             .phase(Phase.EARLY)
             .build();
+        registry.mixin("MixinResourcePackRepositoryEntry")
+            .side(Side.CLIENT)
+            .phase(Phase.EARLY)
+            .build();
         registry.mixin("MixinResourcePackListEntry")
             .side(Side.CLIENT)
             .phase(Phase.EARLY)

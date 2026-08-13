@@ -71,8 +71,12 @@ class LocalIndex private constructor(private val folder: File) {
      * Fast lookup for render paths. This must remain free of filesystem I/O:
      * pack and shader rows call it every frame.
      */
-    fun lookupByFileName(target: File): Entry? =
-        data.entries.firstOrNull { it.fileName == target.name }
+    fun lookupByFileName(target: File): Entry? {
+        val key = keyFor(target)
+        return data.entries.firstOrNull { it.fileName == key }
+            // Compatibility with indexes written before nested Folder Packs.
+            ?: data.entries.firstOrNull { it.fileName == target.name }
+    }
 
     /**
      * Resolve an entry by filename, falling back to hashing a renamed file.
@@ -104,10 +108,11 @@ class LocalIndex private constructor(private val folder: File) {
         previous: Entry? = null,
     ) {
         val sha = Utils.getSha1(file)
-        data.entries.removeAll { it.fileName == file.name }
+        val key = keyFor(file)
+        data.entries.removeAll { it.fileName == key || (key != file.name && it.fileName == file.name) }
         data.entries.add(
             Entry(
-                fileName = file.name,
+                fileName = key,
                 sha1 = sha,
                 platform = platform,
                 projectId = projectId,
@@ -140,6 +145,9 @@ class LocalIndex private constructor(private val folder: File) {
         }
     }
 
+    fun ignoreVersion(file: File, platform: String, version: IVersion) =
+        ignoreVersion(keyFor(file), platform, version)
+
     @Synchronized
     fun restoreVersion(fileName: String, signature: String) {
         replace(fileName) { entry ->
@@ -150,10 +158,14 @@ class LocalIndex private constructor(private val folder: File) {
         }
     }
 
+    fun restoreVersion(file: File, signature: String) = restoreVersion(keyFor(file), signature)
+
     @Synchronized
     fun setUpdateTrack(fileName: String, track: String?) {
         replace(fileName) { it.copy(updateTrack = track) }
     }
+
+    fun setUpdateTrack(file: File, track: String?) = setUpdateTrack(keyFor(file), track)
 
     private fun replace(fileName: String, transform: (Entry) -> Entry) {
         val index = data.entries.indexOfFirst { it.fileName == fileName }
@@ -168,6 +180,13 @@ class LocalIndex private constructor(private val folder: File) {
         if (changed) save()
     }
 
+    @Synchronized
+    fun remove(target: File) {
+        val key = keyFor(target)
+        val changed = data.entries.removeAll { it.fileName == key || (key != target.name && it.fileName == target.name) }
+        if (changed) save()
+    }
+
     /**
      * Drop entries whose file no longer exists. Returns the number of stale
      * entries removed. Called when the user opens a pack screen.
@@ -179,6 +198,35 @@ class LocalIndex private constructor(private val folder: File) {
         val removed = before - data.entries.size
         if (removed > 0) save()
         return removed
+    }
+
+    /** Migrates legacy filename-only records after a managed pack is moved into a Folder Pack. */
+    @Synchronized
+    fun reconcileFiles(candidates: Collection<File>) {
+        val missing = data.entries.filter { !File(folder, it.fileName).exists() && it.sha1 != null }
+        if (missing.isEmpty()) return
+        val candidateHashes = candidates.asSequence()
+            .filter { it.isFile }
+            .mapNotNull { candidate -> Utils.getSha1(candidate)?.let { it to candidate } }
+            .toMap()
+        var changed = false
+        missing.forEach { old ->
+            val match = candidateHashes[old.sha1] ?: return@forEach
+            val index = data.entries.indexOf(old)
+            if (index >= 0) {
+                data.entries[index] = old.copy(fileName = keyFor(match))
+                changed = true
+            }
+        }
+        if (changed) save()
+    }
+
+    private fun keyFor(target: File): String = try {
+        val root = folder.canonicalFile.toPath()
+        val path = target.canonicalFile.toPath()
+        if (path.startsWith(root)) root.relativize(path).toString().replace(File.separatorChar, '/') else target.name
+    } catch (_: Throwable) {
+        target.name
     }
 
     private fun load(): IndexFile {

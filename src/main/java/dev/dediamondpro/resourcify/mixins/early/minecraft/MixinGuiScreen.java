@@ -1,12 +1,14 @@
 package dev.dediamondpro.resourcify.mixins.early.minecraft;
 
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiScreenResourcePacks;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import dev.dediamondpro.resourcify.gui.pack.FolderPackUi;
 import dev.dediamondpro.resourcify.gui.pack.PackOverlayRenderer;
 import dev.dediamondpro.resourcify.gui.pack.PackScreensAddition;
 import dev.dediamondpro.resourcify.services.ProjectType;
@@ -17,6 +19,11 @@ public class MixinGuiScreen {
 
     @Inject(method = "keyTyped", at = @At("HEAD"), cancellable = true)
     private void resourcify$keyTyped(char typedChar, int keyCode, CallbackInfo ci) {
+        GuiScreen self = (GuiScreen) (Object) this;
+        if (self instanceof GuiScreenResourcePacks && FolderPackUi.keyTyped((GuiScreenResourcePacks) self, keyCode)) {
+            ci.cancel();
+            return;
+        }
         if (PackScreensAddition.INSTANCE.onKeyTyped(keyCode)) {
             ci.cancel();
         }
@@ -49,6 +56,11 @@ public class MixinGuiScreen {
 
     @Inject(method = "handleMouseInput", at = @At("HEAD"), cancellable = true)
     private void resourcify$handleMouseInput(CallbackInfo ci) {
+        GuiScreen self = (GuiScreen) (Object) this;
+        if (self instanceof GuiScreenResourcePacks && FolderPackUi.mouseInput((GuiScreenResourcePacks) self)) {
+            ci.cancel();
+            return;
+        }
         if (PackScreensAddition.INSTANCE.onMouseInput()) {
             ci.cancel();
         }

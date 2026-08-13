@@ -1,8 +1,6 @@
 package dev.dediamondpro.resourcify.mixins.early.minecraft;
 
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
@@ -11,8 +9,6 @@ import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiScreenResourcePacks;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.client.resources.ResourcePackListEntry;
-import net.minecraft.client.resources.ResourcePackListEntryFound;
-import net.minecraft.client.resources.ResourcePackRepository;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -22,6 +18,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import dev.dediamondpro.resourcify.gui.pack.FolderPackUi;
 import dev.dediamondpro.resourcify.gui.pack.PackOverlayRenderer;
 import dev.dediamondpro.resourcify.gui.pack.PackScreensAddition;
 import dev.dediamondpro.resourcify.services.ProjectType;
@@ -46,6 +43,7 @@ public class MixinGuiScreenResourcePacks extends GuiScreen {
     @Inject(method = "initGui", at = @At("TAIL"))
     private void resourcify$addCancelButton(CallbackInfo ci) {
         this.resourcify$refreshTimer = 0;
+        FolderPackUi.initialize((GuiScreenResourcePacks) (Object) this, this.field_146966_g, this.field_146969_h);
         int cancelX = this.width / 2 + 4;
         int doneX = cancelX + ACTION_BUTTON_WIDTH + ACTION_BUTTON_GAP;
 
@@ -73,29 +71,14 @@ public class MixinGuiScreenResourcePacks extends GuiScreen {
         if (++this.resourcify$refreshTimer < 100) return;
         this.resourcify$refreshTimer = 0;
 
-        // Rebuild only the available side. This preserves unsaved choices and
-        // ordering on the selected side while still noticing files added or
-        // removed outside the game.
-        ResourcePackRepository repository = this.mc.getResourcePackRepository();
-        repository.updateRepositoryEntriesAll();
-        Set<String> selectedNames = new HashSet<>();
-        for (ResourcePackListEntry listEntry : this.field_146969_h) {
-            if (listEntry instanceof ResourcePackListEntryFound) {
-                selectedNames.add(
-                    ((ResourcePackListEntryFound) listEntry).func_148318_i()
-                        .getResourcePackName());
-            }
-        }
-        this.field_146966_g.clear();
-        for (ResourcePackRepository.Entry entry : repository.getRepositoryEntriesAll()) {
-            if (!selectedNames.contains(entry.getResourcePackName())) {
-                this.field_146966_g.add(new ResourcePackListEntryFound((GuiScreenResourcePacks) (Object) this, entry));
-            }
-        }
+        FolderPackUi.refresh((GuiScreenResourcePacks) (Object) this, this.field_146966_g, this.field_146969_h);
     }
 
     @Inject(method = "actionPerformed", at = @At("HEAD"), cancellable = true)
     private void resourcify$cancelLikeEscape(GuiButton button, CallbackInfo ci) {
+        if (button.enabled && button.id == DONE_BUTTON_ID) {
+            FolderPackUi.expandSelected(this.field_146969_h);
+        }
         if (button.enabled && button.id == CANCEL_BUTTON_ID) {
             this.mc.displayGuiScreen(((PackScreenAccessor) (Object) this).getParentScreen());
             ci.cancel();
@@ -120,6 +103,7 @@ public class MixinGuiScreenResourcePacks extends GuiScreen {
             mouseX,
             mouseY);
         PackOverlayRenderer.INSTANCE.endFrame();
+        FolderPackUi.render((GuiScreenResourcePacks) (Object) this, mouseX, mouseY);
     }
 
     @ModifyVariable(method = "drawScreen", at = @At("HEAD"), argsOnly = true, ordinal = 0)
@@ -134,6 +118,10 @@ public class MixinGuiScreenResourcePacks extends GuiScreen {
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
     private void resourcify$clickAddOrDelete(int mouseX, int mouseY, int mouseButton, CallbackInfo ci) {
+        if (FolderPackUi.mouseClicked((GuiScreenResourcePacks) (Object) this, mouseX, mouseY, mouseButton)) {
+            ci.cancel();
+            return;
+        }
         GuiScreen parent = ((PackScreenAccessor) (Object) this).getParentScreen();
         boolean deleted = PackOverlayRenderer.INSTANCE.handleDeleteClick(mouseX, mouseY, mouseButton, () -> {
             // Re-display a fresh resource-pack screen so the deleted entry
@@ -161,11 +149,12 @@ public class MixinGuiScreenResourcePacks extends GuiScreen {
     }
 
     private boolean resourcify$shouldMaskParentMouse() {
-        return PackScreensAddition.INSTANCE.shouldMaskParentMouse(
-            ProjectType.RESOURCE_PACK,
-            Minecraft.getMinecraft()
-                .getResourcePackRepository()
-                .getDirResourcepacks());
+        return FolderPackUi.isOpen((GuiScreenResourcePacks) (Object) this)
+            || PackScreensAddition.INSTANCE.shouldMaskParentMouse(
+                ProjectType.RESOURCE_PACK,
+                Minecraft.getMinecraft()
+                    .getResourcePackRepository()
+                    .getDirResourcepacks());
     }
 
 }

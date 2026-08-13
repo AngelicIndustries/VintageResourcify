@@ -25,6 +25,7 @@
 * Support for adding third party Modrinth instances
 * Additional resource pack folders (ported from Packed Packs)
 * Additional shader pack folders (ported from Packed Packs)
+* Folder Packs for grouping and ordering related resource packs (ported from Packed Packs)
 
 Vintage Resourcify supports Angelica [![curse](images/icons/curse.png)](https://www.curseforge.com/minecraft/mc-mods/angelica)  [![modrinth](images/icons/modrinth.png)](https://modrinth.com/mod/angelica/versions) [![git](images/icons/git.png)](https://github.com/GTNewHorizons/Angelica) and Swansong [![curse](images/icons/curse.png)](https://www.curseforge.com/minecraft/mc-mods/swansong)  [![modrinth](images/icons/modrinth.png)](https://modrinth.com/mod/swansong) [![git](images/icons/git.png)](https://github.com/vfx-dev/SwanSong). 
 

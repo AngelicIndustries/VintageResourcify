@@ -33,6 +33,7 @@ import dev.dediamondpro.resourcify.util.AdditionalPackFolders
 import dev.dediamondpro.resourcify.util.DownloadManager
 import dev.dediamondpro.resourcify.util.DownloadResult
 import dev.dediamondpro.resourcify.util.LocalIndex
+import dev.dediamondpro.resourcify.util.FolderPackRegistry
 import dev.dediamondpro.resourcify.util.ResourcifySounds
 import dev.dediamondpro.resourcify.util.ShaderGuiHelper
 import dev.dediamondpro.resourcify.util.localize
@@ -561,7 +562,7 @@ object PackScreensAddition {
             val index = LocalIndex.forFolder(packFolder)
             index.listEntries().mapNotNull { entry ->
                 val file = File(packFolder, entry.fileName)
-                file.takeIf { it.exists() && seenNames.add(it.name) }?.let { TrackedPack(packFolder, it, entry) }
+                file.takeIf { it.exists() && seenNames.add(safeCanonical(it).path) }?.let { TrackedPack(packFolder, it, entry) }
             }
         }
         if (tracked.isEmpty()) return emptyList()
@@ -858,7 +859,7 @@ object PackScreensAddition {
                     val file = settingsFile
                     val folder = settingsFolder
                     if (file != null && folder != null) {
-                        LocalIndex.forFolder(folder).setUpdateTrack(file.name, track)
+                        LocalIndex.forFolder(folder).setUpdateTrack(file, track)
                         settingsEntry = settingsEntry?.copy(updateTrack = track)
                         removeCachedCandidate(file)
                     }
@@ -969,7 +970,7 @@ object PackScreensAddition {
         val folder = settingsFolder ?: return
         val file = settingsFile ?: return
         val entry = settingsEntry ?: return
-        LocalIndex.forFolder(folder).ignoreVersion(file.name, entry.platform, candidate)
+        LocalIndex.forFolder(folder).ignoreVersion(file, entry.platform, candidate)
         settingsEntry = LocalIndex.forFolder(folder).lookupByFileName(file)
         val signature = LocalIndex.versionSignature(entry.platform, candidate)
         synchronized(updateLock) {
@@ -984,7 +985,7 @@ object PackScreensAddition {
 
     private fun ignoreCombinedUpdate(entry: UpdateEntry) {
         val version = entry.version ?: return
-        LocalIndex.forFolder(entry.folder).ignoreVersion(entry.oldFile.name, entry.localEntry.platform, version)
+        LocalIndex.forFolder(entry.folder).ignoreVersion(entry.oldFile, entry.localEntry.platform, version)
         synchronized(updateLock) { updateEntries.remove(entry) }
         refreshCachedUpdateStatus()
     }
@@ -992,7 +993,7 @@ object PackScreensAddition {
     private fun restoreSettingsUpdate(signature: String) {
         val folder = settingsFolder ?: return
         val file = settingsFile ?: return
-        LocalIndex.forFolder(folder).restoreVersion(file.name, signature)
+        LocalIndex.forFolder(folder).restoreVersion(file, signature)
         settingsEntry = LocalIndex.forFolder(folder).lookupByFileName(file)
         settingsStatus = localize("resourcify.pack_settings.update_restored")
         val candidate = settingsCandidate
@@ -1016,7 +1017,7 @@ object PackScreensAddition {
                 } else {
                     UpdateDisposition.REVIEW
                 }
-                val packFolder = file.parentFile ?: return@synchronized
+                val packFolder = FolderPackRegistry.definitionFor(file)?.ownerRoot ?: file.parentFile ?: return@synchronized
                 updateEntries.add(UpdateEntry(packFolder, file, candidate, localEntry, disposition))
                 updateEntries.sortWith(compareBy<UpdateEntry> { it.disposition.sortOrder }
                     .thenBy { it.oldFile.name.lowercase(Locale.ROOT) })
@@ -1072,7 +1073,7 @@ object PackScreensAddition {
             }
             if (result == UpdateStatus.UPDATED) {
                 runClientSync { playDownloadChime() }
-                val newFile = File(folder, candidate.getFileName())
+                val newFile = File(file.parentFile ?: folder, candidate.getFileName())
                 settingsFile = newFile
                 settingsEntry = LocalIndex.forFolder(folder).lookupByFileName(newFile)
                 synchronized(updateLock) { updateEntries.removeAll { it.oldFile.name == file.name } }
@@ -1484,7 +1485,7 @@ object PackScreensAddition {
         val folder = entry.folder
         val version = entry.version ?: return UpdateStatus.FAILED
         val url = version.getDownloadUrl() ?: return UpdateStatus.FAILED
-        val newFile = File(folder, version.getFileName())
+        val newFile = File(entry.oldFile.parentFile ?: folder, version.getFileName())
         val index = LocalIndex.forFolder(folder)
         val oldEntry = index.lookupByFile(entry.oldFile)
 
@@ -1517,6 +1518,9 @@ object PackScreensAddition {
         if (result == DownloadResult.FAILED) return UpdateStatus.FAILED
 
         return try {
+            if (entry.oldFile != newFile) {
+                FolderPackRegistry.replaceChild(entry.oldFile, newFile)
+            }
             if (entry.oldFile != newFile && entry.oldFile.exists()) {
                 if (type == ProjectType.RESOURCE_PACK || type == ProjectType.AYCY_RESOURCE_PACK) {
                     runClientSync {
@@ -1529,7 +1533,7 @@ object PackScreensAddition {
                 if (!entry.oldFile.delete()) {
                     VintageResourcify.LOG.warn("Could not delete old pack {}", entry.oldFile)
                 }
-                index.remove(entry.oldFile.name)
+                index.remove(entry.oldFile)
             }
             if (oldEntry != null) {
                 index.record(

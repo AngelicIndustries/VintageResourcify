@@ -24,6 +24,7 @@ import dev.dediamondpro.resourcify.services.ProjectType
 import dev.dediamondpro.resourcify.util.AdditionalPackFolders
 import dev.dediamondpro.resourcify.util.ClientGuiTasks
 import dev.dediamondpro.resourcify.util.LocalIndex
+import dev.dediamondpro.resourcify.util.FolderPackRegistry
 import dev.dediamondpro.resourcify.util.ResourcifySounds
 import dev.dediamondpro.resourcify.util.ShaderGuiHelper
 import dev.dediamondpro.resourcify.util.localize
@@ -560,7 +561,7 @@ object PackOverlayRenderer {
             // entry pointing at a now-missing file.
             try {
                 val opts = Minecraft.getMinecraft().gameSettings
-                val name = hit.file.name
+                val name = FolderPackRegistry.stablePackName(hit.file)
                 if (opts.resourcePacks.removeAll { it == name }) {
                     opts.saveOptions()
                 }
@@ -572,7 +573,7 @@ object PackOverlayRenderer {
                 VintageResourcify.LOG.warn("Could not delete pack {}", hit.file)
                 return false
             }
-            LocalIndex.forFolder(hit.folder).remove(hit.file.name)
+            LocalIndex.forFolder(hit.folder).remove(hit.file)
             // Drive the same refresh path the host screen's "Done" button
             // would. Without this, the repository / Iris keeps the deleted
             // entry loaded and the host re-renders the row.
@@ -634,7 +635,11 @@ object PackOverlayRenderer {
 
         val canonicalFolder = safeCanonical(folder)
         val canonicalFile = safeCanonical(file)
-        return canonicalFile != canonicalFolder && canonicalFile.parentFile == canonicalFolder
+        if (canonicalFile == canonicalFolder) return false
+        if (canonicalFile.parentFile == canonicalFolder) return true
+        return FolderPackRegistry.definitionFor(canonicalFile)?.let {
+            safeCanonical(it.ownerRoot) == canonicalFolder
+        } == true
     }
 
     private fun safeCanonical(file: File): File {
@@ -666,6 +671,7 @@ object PackOverlayRenderer {
     fun resourcePacksFolder(): File = Minecraft.getMinecraft().resourcePackRepository.dirResourcepacks
 
     fun resourcePackFolder(file: File): File? {
+        FolderPackRegistry.definitionFor(file)?.let { return it.ownerRoot }
         val mc = Minecraft.getMinecraft()
         val primary = mc.resourcePackRepository.dirResourcepacks
         val folders = AdditionalPackFolders.all(
