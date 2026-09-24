@@ -1,6 +1,7 @@
 package dev.dediamondpro.resourcify.mixins.early.angelica;
 
 import net.coderbot.iris.gui.element.ShaderPackSelectionList;
+import net.coderbot.iris.gui.screen.ShaderPackScreen;
 import net.minecraft.client.gui.GuiScreen;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -18,10 +19,9 @@ import dev.dediamondpro.resourcify.util.IrisHelper;
 
 /**
  * Adds the Resourcify "+" overlay button to Angelica's Iris shader pack
- * selection screen. Targeted by string so we don't need Angelica at compile
- * time - it's a runtimeOnly dep.
+ * selection screen. Registered only when Angelica is loaded.
  */
-@Mixin(targets = "net.coderbot.iris.gui.screen.ShaderPackScreen")
+@Mixin(ShaderPackScreen.class)
 public class MixinShaderPackScreen extends GuiScreen {
 
     @Shadow(remap = false)
