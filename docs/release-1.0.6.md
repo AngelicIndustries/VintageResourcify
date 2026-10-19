@@ -66,3 +66,18 @@ The dev stack emits unrelated NEI missing-resource/texture warnings and BSL warn
 4. Verify download links and dependency relations on the published pages. Update any external addon examples/wiki imports to the new VR package.
 
 Do not resume VPP changes as part of this release. Resume its namespace/bridge work and remaining UX tests after VR is stable.
+
+## CurseForge-only recovery
+
+CurseForgeGradle now requires explicit environment tags when automatic detection is disabled. The custom uploader reads `curseForgeEnvironments` and applies these tags. A successful shared workflow alone is not proof of publication: it tolerates individual publishing failures, so inspect logs and remote artifacts too.
+
+If CurseForge fails after the other destinations are published, dispatch **Publish existing release to CurseForge** with the existing version tag. It downloads the restricted jar and notes from that GitHub release, then uploads only to CurseForge. Do not retag, rebuild released artifacts, or rerun every publisher for this case. Check that CurseForge has no existing upload before retrying to avoid duplicates.
+
+Local metadata validation without an upload:
+
+```sh
+VERSION=1.0.6 CHANGELOG_FILE=.changelogs/1.0.6.md CURSEFORGE_TOKEN=unused-debug-token \
+  ./gradlew publishCurseforge --no-configuration-cache \
+  -PcurseForgeDryRun=true \
+  -PcurseForgeArtifact=/absolute/path/to/vintage-resourcify-1.0.6-curseforge.jar
+```

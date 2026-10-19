@@ -113,6 +113,16 @@ val configuredCurseForgeRelations = providers.gradleProperty("curseForgeRelation
     .orNull
     ?.trim()
     .orEmpty()
+val configuredCurseForgeEnvironments = providers.gradleProperty("curseForgeEnvironments")
+    .getOrElse("client,server")
+    .split(",")
+    .map { environment ->
+        when (environment.trim().lowercase()) {
+            "client" -> "Client"
+            "server" -> "Server"
+            else -> error("Invalid CurseForge environment: $environment")
+        }
+    }
 val configuredMinecraftVersion = providers.gradleProperty("minecraftVersion")
     .orNull
     ?.trim()
@@ -201,6 +211,12 @@ if (configuredCurseForgeProjectId.isNotEmpty()) {
     plugins.apply(CurseForgeGradlePlugin::class.java)
 
     val changelogFile = file(System.getenv("CHANGELOG_FILE") ?: "CHANGELOG.md")
+    val existingCurseForgeArtifact = providers.gradleProperty("curseForgeArtifact").orNull?.let { file(it) }
+    if (existingCurseForgeArtifact != null) {
+        require(existingCurseForgeArtifact.name.endsWith("-curseforge.jar")) {
+            "A CurseForge-only retry must use the released -curseforge.jar artifact"
+        }
+    }
     val modVersionProvider = providers.provider {
         val extras = extensions.extraProperties
         if (extras.has("modVersion")) {
@@ -213,11 +229,17 @@ if (configuredCurseForgeProjectId.isNotEmpty()) {
     val publishCurseforge = tasks.register<TaskPublishCurseForge>("publishCurseforge") {
         group = "publishing"
         description = "Publishes the CurseForge-specific VintageResourcify jar to CurseForge."
-        dependsOn(reobfCurseForgeJar)
+        if (existingCurseForgeArtifact == null) {
+            dependsOn(reobfCurseForgeJar)
+        }
 
         apiToken = providers.environmentVariable("CURSEFORGE_TOKEN")
+        debugMode = providers.gradleProperty("curseForgeDryRun").map { it.toBoolean() }.getOrElse(false)
         disableVersionDetection()
-        val artifact = upload(configuredCurseForgeProjectId, reobfCurseForgeJar.flatMap { it.archiveFile })
+        val artifact = upload(
+            configuredCurseForgeProjectId,
+            existingCurseForgeArtifact ?: reobfCurseForgeJar.flatMap { it.archiveFile }
+        )
         if (changelogFile.exists()) {
             artifact.changelogType = "markdown"
             artifact.changelog = changelogFile
@@ -225,6 +247,7 @@ if (configuredCurseForgeProjectId.isNotEmpty()) {
         artifact.releaseType = modVersionProvider.map { if (it.endsWith("-pre")) "beta" else "release" }
         artifact.addGameVersion(configuredMinecraftVersion, "Forge")
         artifact.addModLoader("Forge")
+        configuredCurseForgeEnvironments.forEach { artifact.addEnvironment(it) }
 
         configuredCurseForgeRelations.split(";")
             .map { it.trim() }
