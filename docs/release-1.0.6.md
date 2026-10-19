@@ -36,6 +36,7 @@ The local jar override is only for testing before Maven publication. Normal VRAP
 
 - Regular build: 20 tests passed, including provider API, downloads/checksums, update-index filename changes and release/config migration.
 - CurseForge build: 14 provider/download tests passed against its replacement policy classes.
+- SwanSong remains pinned to 1.3.6, now using its original development jar through Angelic's GitHub Releases Maven (`vfx-dev:SwanSong:1.3.6:dev`). Its checksum matches the previous Ventooth development artifact. The original release CI attempts failed before publication because its Maven dependency endpoint returned HTTP 502; no SwanSong version upgrade was made.
 - VRAP build and new API linkage passed.
 - Artifact inspection: both VR distributions have renamed classes, mixin configurations/refmap/core plugin, relocated Java-8-compatible CommonMark, correct metadata, and distinct distribution policies. Neither bundles Kotlin or AngelLib. Maven POM uses the new group and AngelLib dependency.
 - Linux Xvfb, Java 25/lwjgl3ify: real mouse/keyboard browsing, project Markdown/images, resource-pack download and enable, installed markers and update checking passed.

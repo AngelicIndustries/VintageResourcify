@@ -8,9 +8,19 @@ repositories {
     maven {
         name = "FalsePattern Maven"
         url = "https://mvn.falsepattern.com/releases/"
+        content {
+            includeGroup("com.falsepattern")
+        }
     }
-    maven {
-        name = "Ventooth Maven"
-        url = "https://mvn.ventooth.com/releases/"
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Angelic GitHub Releases"
+                url = "https://maven.angelic.industries/github/"
+            }
+        }
+        filter {
+            includeModule("vfx-dev", "SwanSong")
+        }
     }
 }
