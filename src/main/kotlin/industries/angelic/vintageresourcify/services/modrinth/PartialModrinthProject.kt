@@ -1,0 +1,142 @@
+/*
+ * This file is part of Resourcify
+ * Copyright (C) 2024 DeDiamondPro
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License Version 3 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package industries.angelic.vintageresourcify.services.modrinth
+
+import com.google.gson.annotations.SerializedName
+import industries.angelic.vintageresourcify.services.IGalleryImage
+import industries.angelic.vintageresourcify.services.IProject
+import industries.angelic.vintageresourcify.services.IMember
+import industries.angelic.vintageresourcify.services.IVersion
+import industries.angelic.vintageresourcify.util.*
+import java.awt.Color
+import java.net.URL
+import java.util.concurrent.CompletableFuture
+
+data class PartialModrinthProject(
+    private val title: String,
+    @SerializedName("description") private val summary: String,
+    private val author: String,
+    @SerializedName("icon_url") private val iconUrl: String?,
+    private val gallery: List<String>,
+    @SerializedName("featured_gallery") private val featuredGallery: String?,
+    private val color: Int?,
+    private val slug: String,
+    @SerializedName("project_type") private val projectType: String,
+    // Modrinth's /v2/search returns this as "project_id" (verified 2026-05-14).
+    // Upstream's lack of @SerializedName here is silently broken on the
+    // current API; the field stays bytecode-named `id` so the rest of the
+    // ported logic doesn't change.
+    @SerializedName("project_id") private val id: String,
+    private val downloads: Int = 0,
+) : IProject {
+    @Transient
+    private var projectRequest: CompletableFuture<FullModrinthProject?>? = null
+
+    @Transient
+    private var membersRequest: CompletableFuture<List<Member>?>? = null
+
+    @Transient
+    private var versionsRequest: CompletableFuture<List<ModrinthVersion>>? = null
+
+    @Transient
+    private var service: ModrinthApiService? = null
+
+    internal fun bindService(service: ModrinthApiService): PartialModrinthProject {
+        this.service = service
+        return this
+    }
+
+    private fun service(): ModrinthApiService = service ?: ModrinthService
+
+    override fun getName(): String = title
+    override fun getId(): String = id
+    override fun getSummary(): String = summary
+    override fun getAuthor(): String = author
+    override fun getDownloads(): Int = downloads
+    override fun getIconUrl(): URL? = iconUrl?.toURL()
+    override fun getBannerUrl(): URL? = featuredGallery?.toURL() ?: gallery.firstOrNull()?.toURL()
+    override fun getBannerColor(): Color? = color?.let { Color(it) }
+    override fun getDescription(): CompletableFuture<String> =
+        fetchProject().thenApply { it?.getDescription()?.getNow(null) ?: error("Failed to fetch description.") }
+
+    override fun getBrowserUrl(): String = "${service().browserBaseUrl}/$projectType/$slug"
+    override fun getCategories(): CompletableFuture<List<String>> =
+        fetchProject().thenApply {
+            it?.getCategories()?.getNow(null) ?: error("Failed to fetch categories.")
+        }
+
+    override fun getExternalLinks(): CompletableFuture<Map<String, String>> = fetchProject().thenApply {
+        it?.getExternalLinks()?.getNow(null) ?: error("Failed to get external links")
+    }
+
+    private fun fetchProject(): CompletableFuture<FullModrinthProject?> {
+        return projectRequest ?: supplyAsync {
+            URL("${service().apiUrl}/project/$slug").getJson<FullModrinthProject>()?.bindService(service())
+        }.apply { projectRequest = this }
+    }
+
+    override fun getMembers(): CompletableFuture<List<IMember>> = fetchMembers().thenApply { members ->
+        members?.map { it.user.bindService(service()).apply { member = it } } ?: error("Failed to fetch members.")
+    }
+
+    override fun hasGallery(): Boolean = gallery.isNotEmpty()
+
+    override fun getGalleryImages(): CompletableFuture<List<IGalleryImage>> = fetchProject().thenApply {
+        it?.getGalleryImages()?.getNow(null) ?: error("Failed to fetch gallery.")
+    }
+
+    override fun getVersions(): CompletableFuture<List<IVersion>> {
+        return (versionsRequest ?: supplyAsync {
+            URL("${service().apiUrl}/project/$slug/version").getJson<List<ModrinthVersion>>()
+                ?.onEach { it.bindService(service()) }
+                ?.filter { it.hasFile() }
+                // Filter mods (jar files) out of datapack versions
+                ?.filter { projectType != "mod" || it.getLoaders().contains("datapack") }
+                ?: error("Failed to fetch versions.")
+        }.apply { versionsRequest = this }) as CompletableFuture<List<IVersion>>
+    }
+
+    private fun fetchMembers(): CompletableFuture<List<Member>?> {
+        return membersRequest ?: supplyAsync {
+            URL("${service().apiUrl}/project/$slug/members").getJson<List<Member>>()
+        }.apply { membersRequest = this }
+    }
+
+    data class Member(val user: User, val role: String)
+
+    data class User(
+        @SerializedName("username") override val name: String,
+        @SerializedName("avatar_url") override val avatarUrl: String?
+    ) : IMember {
+        var member: Member? = null
+
+        @Transient
+        private var browserBaseUrl: String? = null
+
+        internal fun bindService(service: ModrinthApiService): User {
+            browserBaseUrl = service.browserBaseUrl
+            return this
+        }
+
+        override val role: String
+            get() = member?.role ?: "Owner"
+
+        override val url: String
+            get() = "${browserBaseUrl ?: ModrinthService.browserBaseUrl}/user/$name"
+    }
+}

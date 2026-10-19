@@ -4,4 +4,4 @@ plugins {
     kotlin("jvm")
 }
 
-apply(from = "https://raw.githubusercontent.com/JackOfNoneTrades/67minecraft-gradle-publish/master/67minecraft-publish.gradle.kts")
+apply(from = "https://raw.githubusercontent.com/AngelicIndustries/67minecraft-gradle-publish/${property("publish67ScriptTag")}/67minecraft-publish.gradle.kts")

@@ -1,0 +1,171 @@
+package industries.angelic.vintageresourcify.mixins.early.minecraft;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiOptionButton;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiScreenResourcePacks;
+import net.minecraft.client.resources.I18n;
+import net.minecraft.client.resources.ResourcePackListEntry;
+import net.minecraft.client.resources.ResourcePackListEntryFound;
+import net.minecraft.client.resources.ResourcePackRepository;
+
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import industries.angelic.vintageresourcify.gui.pack.PackOverlayRenderer;
+import industries.angelic.vintageresourcify.gui.pack.PackScreensAddition;
+import industries.angelic.vintageresourcify.services.ProjectType;
+
+@Mixin(GuiScreenResourcePacks.class)
+public class MixinGuiScreenResourcePacks extends GuiScreen {
+
+    private static final int DONE_BUTTON_ID = 1;
+    private static final int CANCEL_BUTTON_ID = -33701;
+    private static final int ACTION_BUTTON_WIDTH = 72;
+    private static final int ACTION_BUTTON_GAP = 6;
+
+    @Shadow
+    private List<ResourcePackListEntry> field_146966_g;
+
+    @Shadow
+    private List<ResourcePackListEntry> field_146969_h;
+
+    @Unique
+    private int resourcify$refreshTimer;
+
+    @Inject(method = "initGui", at = @At("TAIL"))
+    private void resourcify$addCancelButton(CallbackInfo ci) {
+        this.resourcify$refreshTimer = 0;
+        int cancelX = this.width / 2 + 4;
+        int doneX = cancelX + ACTION_BUTTON_WIDTH + ACTION_BUTTON_GAP;
+
+        for (GuiButton button : this.buttonList) {
+            if (button.id == DONE_BUTTON_ID) {
+                button.xPosition = doneX;
+                button.width = ACTION_BUTTON_WIDTH;
+                break;
+            }
+        }
+
+        this.buttonList.add(
+            new GuiOptionButton(
+                CANCEL_BUTTON_ID,
+                cancelX,
+                this.height - 48,
+                ACTION_BUTTON_WIDTH,
+                20,
+                I18n.format("gui.cancel", new Object[0])));
+    }
+
+    @Override
+    public void updateScreen() {
+        super.updateScreen();
+        if (++this.resourcify$refreshTimer < 100) return;
+        this.resourcify$refreshTimer = 0;
+
+        // Rebuild only the available side. This preserves unsaved choices and
+        // ordering on the selected side while still noticing files added or
+        // removed outside the game.
+        ResourcePackRepository repository = this.mc.getResourcePackRepository();
+        repository.updateRepositoryEntriesAll();
+        Set<String> selectedNames = new HashSet<>();
+        for (ResourcePackListEntry listEntry : this.field_146969_h) {
+            if (listEntry instanceof ResourcePackListEntryFound) {
+                selectedNames.add(
+                    ((ResourcePackListEntryFound) listEntry).func_148318_i()
+                        .getResourcePackName());
+            }
+        }
+        this.field_146966_g.clear();
+        for (ResourcePackRepository.Entry entry : repository.getRepositoryEntriesAll()) {
+            if (!selectedNames.contains(entry.getResourcePackName())) {
+                this.field_146966_g.add(new ResourcePackListEntryFound((GuiScreenResourcePacks) (Object) this, entry));
+            }
+        }
+    }
+
+    @Inject(method = "actionPerformed", at = @At("HEAD"), cancellable = true)
+    private void resourcify$cancelLikeEscape(GuiButton button, CallbackInfo ci) {
+        if (button.enabled && button.id == CANCEL_BUTTON_ID) {
+            this.mc.displayGuiScreen(((PackScreenAccessor) (Object) this).getParentScreen());
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "drawScreen", at = @At("HEAD"))
+    private void resourcify$resetDeleteRegions(int mouseX, int mouseY, float partialTicks, CallbackInfo ci) {
+        // Clear the previous frame's delete-button hit list so this frame
+        // can be populated fresh as each row draws itself.
+        PackOverlayRenderer.INSTANCE.beginFrame();
+    }
+
+    @Inject(method = "drawScreen", at = @At("TAIL"))
+    private void resourcify$drawAddButton(int mouseX, int mouseY, float partialTicks, CallbackInfo ci) {
+        PackScreensAddition.INSTANCE.onRender(
+            ProjectType.RESOURCE_PACK,
+            Minecraft.getMinecraft()
+                .getResourcePackRepository()
+                .getDirResourcepacks(),
+            (GuiScreen) (Object) this,
+            mouseX,
+            mouseY);
+        PackOverlayRenderer.INSTANCE.endFrame();
+    }
+
+    @ModifyVariable(method = "drawScreen", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+    private int resourcify$maskMouseXWhenUpdatePanelOpen(int mouseX) {
+        return this.resourcify$shouldMaskParentMouse() ? 0 : mouseX;
+    }
+
+    @ModifyVariable(method = "drawScreen", at = @At("HEAD"), argsOnly = true, ordinal = 1)
+    private int resourcify$maskMouseYWhenUpdatePanelOpen(int mouseY) {
+        return this.resourcify$shouldMaskParentMouse() ? 0 : mouseY;
+    }
+
+    @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
+    private void resourcify$clickAddOrDelete(int mouseX, int mouseY, int mouseButton, CallbackInfo ci) {
+        GuiScreen parent = ((PackScreenAccessor) (Object) this).getParentScreen();
+        boolean deleted = PackOverlayRenderer.INSTANCE.handleDeleteClick(mouseX, mouseY, mouseButton, () -> {
+            // Re-display a fresh resource-pack screen so the deleted entry
+            // disappears from the list immediately. Captured parent because
+            // the call may run after the GuiYesNo dialog replaces `this`.
+            Minecraft.getMinecraft()
+                .displayGuiScreen(new GuiScreenResourcePacks(parent));
+            return kotlin.Unit.INSTANCE;
+        });
+        if (deleted) {
+            ci.cancel();
+            return;
+        }
+        if (PackScreensAddition.INSTANCE.onMouseClick(
+            mouseX,
+            mouseY,
+            mouseButton,
+            ProjectType.RESOURCE_PACK,
+            Minecraft.getMinecraft()
+                .getResourcePackRepository()
+                .getDirResourcepacks(),
+            (GuiScreen) (Object) this)) {
+            ci.cancel();
+        }
+    }
+
+    private boolean resourcify$shouldMaskParentMouse() {
+        return PackScreensAddition.INSTANCE.shouldMaskParentMouse(
+            ProjectType.RESOURCE_PACK,
+            Minecraft.getMinecraft()
+                .getResourcePackRepository()
+                .getDirResourcepacks());
+    }
+
+}

@@ -6,7 +6,7 @@
 		"description": "1.7.10 backport of Resourcify, an in-game resource pack and shader browser for Modrinth and CurseForge.",
 		"version": "${modVersion}",
 		"mcversion": "${minecraftVersion}",
-		"url": "https://github.com/JackOfNoneTrades/VintageResourcify",
+		"url": "https://github.com/AngelicIndustries/VintageResourcify",
 		"updateUrl": "",
 		"authorList": ["DeDiamondPro", "jack"],
 		"credits": "DeDiamondPro (Resourcify), GT:NH ExampleMod. Sounds are from zapsplat.com.",

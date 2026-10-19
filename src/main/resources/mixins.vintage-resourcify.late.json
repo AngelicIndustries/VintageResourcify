@@ -1,7 +1,7 @@
 {
   "required": true,
   "minVersion": "0.8.7-GTNH",
-  "package": "dev.dediamondpro.resourcify.mixins.late",
+  "package": "industries.angelic.vintageresourcify.mixins.late",
   "refmap": "mixins.vintage-resourcify.refmap.json",
   "target": "@env(DEFAULT)",
   "compatibilityLevel": "JAVA_8"

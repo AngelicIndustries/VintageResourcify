@@ -56,36 +56,36 @@ abstract class GenerateCurseForgeMcmodInfoTask : DefaultTask() {
     }
 }
 
-// Pin Fent Maven as the topmost repo so FentLib resolves reliably even after
-// GTNH's settingsconvention prepends its own mirrors. Mirrors FentLib's own
+// Pin Angelic Maven as the topmost repo so AngelLib resolves reliably even after
+// GTNH's settingsconvention prepends its own mirrors. Mirrors AngelLib's own
 // addon.gradle.kts verbatim.
-val fentMavenName = "Fent Maven"
-val fentMavenUrl = uri("https://maven.fentanylsolutions.org/releases")
+val angelicMavenName = "Angelic Maven"
+val angelicMavenUrl = uri("https://maven.angelic.industries/releases")
 
-fun RepositoryHandler.keepFentMavenFirst() {
-    fun currentFentRepo(): MavenArtifactRepository? = withType(MavenArtifactRepository::class.java)
-        .firstOrNull { it.url == fentMavenUrl || it.name == fentMavenName }
+fun RepositoryHandler.keepAngelicMavenFirst() {
+    fun currentAngelicRepo(): MavenArtifactRepository? = withType(MavenArtifactRepository::class.java)
+        .firstOrNull { it.url == angelicMavenUrl || it.name == angelicMavenName }
 
-    fun promoteFentRepo() {
-        val fentRepo = currentFentRepo() ?: maven {
-            name = fentMavenName
-            url = fentMavenUrl
+    fun promoteAngelicRepo() {
+        val angelicRepo = currentAngelicRepo() ?: maven {
+            name = angelicMavenName
+            url = angelicMavenUrl
         }
-        if (firstOrNull() !== fentRepo) {
-            remove(fentRepo)
-            addFirst(fentRepo)
+        if (firstOrNull() !== angelicRepo) {
+            remove(angelicRepo)
+            addFirst(angelicRepo)
         }
     }
 
-    promoteFentRepo()
+    promoteAngelicRepo()
     whenObjectAdded {
-        promoteFentRepo()
+        promoteAngelicRepo()
     }
 }
 
 gradle.allprojects {
-    repositories.keepFentMavenFirst()
-    buildscript.repositories.keepFentMavenFirst()
+    repositories.keepAngelicMavenFirst()
+    buildscript.repositories.keepAngelicMavenFirst()
 }
 
 // commonmark 0.22+ targets Java 11. Transform only this dependency to Java 8;
@@ -164,7 +164,7 @@ val curseForgeJar = tasks.register<Jar>("curseForgeJar") {
     manifest {
         attributes(
             "FMLCorePluginContainsFMLMod" to "true",
-            "FMLCorePlugin" to "dev.dediamondpro.resourcify.core.EarlyMixinLoader",
+            "FMLCorePlugin" to "industries.angelic.vintageresourcify.core.EarlyMixinLoader",
             "TweakClass" to "org.spongepowered.asm.launch.MixinTweaker",
             "MixinConfigs" to "mixins.vintage-resourcify.json",
             "ForceLoadAsMod" to "true",
@@ -175,14 +175,14 @@ val curseForgeJar = tasks.register<Jar>("curseForgeJar") {
         exclude(
             "META-INF/MANIFEST.MF",
             "mcmod.info",
-            "dev/dediamondpro/resourcify/config/ConfiguredPlatforms*.class",
-            "dev/dediamondpro/resourcify/services/DistributionPolicy.class",
+            "industries/angelic/vintageresourcify/config/ConfiguredPlatforms*.class",
+            "industries/angelic/vintageresourcify/services/DistributionPolicy.class",
         )
     }
     from(curseForgeReplacementSourceSet.output.classesDirs) {
         include(
-            "dev/dediamondpro/resourcify/config/ConfiguredPlatforms.class",
-            "dev/dediamondpro/resourcify/services/DistributionPolicy.class",
+            "industries/angelic/vintageresourcify/config/ConfiguredPlatforms.class",
+            "industries/angelic/vintageresourcify/services/DistributionPolicy.class",
         )
     }
     from(curseForgeMcmodInfoFile)
@@ -248,7 +248,7 @@ if (configuredCurseForgeProjectId.isNotEmpty()) {
 }
 
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>().configureEach {
-    relocate("org.commonmark", "dev.dediamondpro.resourcify.libs.commonmark")
+    relocate("org.commonmark", "industries.angelic.vintageresourcify.libs.commonmark")
 }
 
 // ktfmt (the Kotlin formatter spotless uses) crashes on JDK 25 with

@@ -37,3 +37,6 @@ addon.late.local.gradle.kts
 layout.json
 _upstream_flat/
 .kotlin/
+.env
+__pycache__/
+*.pyc
