@@ -10,13 +10,14 @@ import net.minecraft.util.ResourceLocation;
 import industries.angelic.vintageresourcify.services.DistributionPolicy;
 import industries.angelic.vintageresourcify.services.IService;
 import industries.angelic.vintageresourcify.services.ServiceRegistry;
+import industries.angelic.vintageresourcify.services.curseforge.CurseForgeApiService;
 import industries.angelic.vintageresourcify.services.modrinth.ModrinthApiService;
 import industries.angelic.vintageresourcify.util.LocalIndex;
 
 /** Client-only entry point for Forge addon mods. See the Platform Addons page in the project wiki. */
 public final class ProviderApi {
 
-    public static final int API_VERSION = 1;
+    public static final int API_VERSION = 2;
 
     private ProviderApi() {}
 
@@ -47,16 +48,41 @@ public final class ProviderApi {
     public static RegistrationResult registerModrinth(String platformId, String displayName, String apiBaseUrl,
         String browserBaseUrl, ResourceLocation icon) {
         if (!isRegistrationEnabled()) return RegistrationResult.DISABLED_BY_DISTRIBUTION;
-        Objects.requireNonNull(displayName, "displayName");
-        if (displayName.trim()
-            .isEmpty()) throw new IllegalArgumentException("Display name must not be blank");
         return register(
             new ModrinthApiService(
-                displayName.trim(),
+                requireDisplayName(displayName),
                 normalizeBaseUrl(apiBaseUrl),
                 normalizeBaseUrl(browserBaseUrl),
                 Objects.requireNonNull(platformId, "platformId")),
             icon);
+    }
+
+    public static RegistrationResult registerCurseForge(String platformId, String displayName, String apiBaseUrl) {
+        return registerCurseForge(platformId, displayName, apiBaseUrl, null);
+    }
+
+    /**
+     * Register an addon-owned CurseForge v1-compatible platform, including search, projects, and fingerprint updates.
+     * Supply the complete API base (including /v1). No API key is sent. To add headers or replace endpoints the
+     * platform lacks, subclass CurseForgeApiService and pass it to register() instead.
+     * Registration performs no network requests. Malformed URLs or blank names throw IllegalArgumentException.
+     */
+    public static RegistrationResult registerCurseForge(String platformId, String displayName, String apiBaseUrl,
+        ResourceLocation icon) {
+        if (!isRegistrationEnabled()) return RegistrationResult.DISABLED_BY_DISTRIBUTION;
+        return register(
+            new CurseForgeApiService(
+                requireDisplayName(displayName),
+                normalizeBaseUrl(apiBaseUrl),
+                Objects.requireNonNull(platformId, "platformId")),
+            icon);
+    }
+
+    private static String requireDisplayName(String displayName) {
+        Objects.requireNonNull(displayName, "displayName");
+        if (displayName.trim()
+            .isEmpty()) throw new IllegalArgumentException("Display name must not be blank");
+        return displayName.trim();
     }
 
     private static String normalizeBaseUrl(String value) {

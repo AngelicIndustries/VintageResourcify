@@ -29,28 +29,42 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.CompletableFuture
 
-object CurseForgeService : IService {
-    const val API = "https://api.curseforge.com/v1"
-
-    /**
-     * Fallback CurseForge API key used when Config.curseApiToken is empty.
-     */
-    const val API_KEY = "\$2a\$10\$x/7WFjN78HRAg7S6IQQCJeYoJz0/PQNCZIoN7CY3GxwAI6krlRskW"
-    private var minecraftVersions: CompletableFuture<List<CurseForgeMinecraftVersions>>? = null
+/**
+ * A CurseForge v1-compatible API. The base class sends no API key; override [requestHeaders] to add one.
+ * Mirrors that lack an endpoint can override its fetch hook. Hooks run on worker threads.
+ */
+open class CurseForgeApiService(
+    private val serviceName: String,
+    val apiUrl: String,
+    private val stablePlatformId: String = serviceName.lowercase(),
+) : IService {
+    private var minecraftVersions: CompletableFuture<List<String>>? = null
     private var categories: CompletableFuture<List<CurseForgeCategory>>? = null
 
-    override fun getName(): String = "CurseForge"
+    override fun getName(): String = serviceName
+    override fun getPlatformId(): String = stablePlatformId
     override fun isProjectTypeSupported(type: ProjectType): Boolean = type.getClassId() != null
 
-    fun requestHeaders(): Map<String, String> {
-        val headers = mutableMapOf(
-            "x-api-key" to (Config.instance.curseApiToken.trim().ifEmpty { API_KEY })
-        )
-        Config.instance.curseUserAgent.trim().takeIf { it.isNotEmpty() }?.let {
-            headers["User-Agent"] = it
-        }
-        return headers
-    }
+    /** Sent with every request to [apiUrl]. */
+    open fun requestHeaders(): Map<String, String> = emptyMap()
+
+    /** Minecraft version names for the version filter, or null if they can't be fetched. */
+    open fun fetchMinecraftVersions(): List<String>? =
+        URL("$apiUrl/minecraft/version")
+            .getJson<CurseForgeMinecraftVersionsResponse>(headers = requestHeaders(), useCache = false)
+            ?.data?.map { it.name }
+
+    /** The project's HTML description, or null if it can't be fetched. */
+    open fun fetchDescription(project: IProject): String? =
+        URL("$apiUrl/mods/${project.getId()}/description")
+            .getJson<CurseForgeProject.Description>(headers = requestHeaders())
+            ?.data
+
+    /** The file's HTML changelog, or null if it can't be fetched. */
+    open fun fetchChangelog(projectId: String, fileId: String): String? =
+        URL("$apiUrl/mods/$projectId/files/$fileId/changelog")
+            .getJson<CurseForgeVersion.Changelog>(headers = requestHeaders())
+            ?.data
 
     override fun search(
         query: String,
@@ -60,7 +74,7 @@ object CurseForgeService : IService {
         offset: Int,
         type: ProjectType
     ): ISearchData? {
-        return URIBuilder("$API/mods/search")
+        return URIBuilder("$apiUrl/mods/search")
             .apply {
                 addParameter("searchFilter", query)
                 addParameter("gameId", "432")
@@ -75,29 +89,26 @@ object CurseForgeService : IService {
                 }
                 addParameter("categoryIds", "[${actualCategories.joinToString(",")}]")
                 addParameter("gameVersions", "[${minecraftVersions.joinToString(",") { "\"$it\"" }}]")
-            }.build().toURL().getJson<CurseForgeSearchData>(headers = requestHeaders()).apply {
-                this?.let { // Filter data packs out of resource packs
-                    if (type != ProjectType.RESOURCE_PACK) return@let
-                    projects = projects.filter { !it.getInternalCategories().any { c -> c.id == 5193 } }
+            }.build().toURL().getJson<CurseForgeSearchData>(headers = requestHeaders())?.also { result ->
+                result.projects.forEach { it.bindService(this) }
+                // Filter data packs out of resource packs
+                if (type == ProjectType.RESOURCE_PACK) {
+                    result.projects = result.projects.filter { !it.getInternalCategories().any { c -> c.id == 5193 } }
                 }
             }
     }
 
     override fun getMinecraftVersions(): CompletableFuture<Map<String, String>> {
-        fetchMinecraftVersions()
+        loadMinecraftVersions()
         return minecraftVersions?.thenApply {
-            it.associate { version -> version.name to version.name }
+            it.associateWith { version -> version }
         } ?: supply { emptyMap() }
     }
 
-    private fun fetchMinecraftVersions() {
+    private fun loadMinecraftVersions() {
         if (minecraftVersions != null && minecraftVersions?.isDone == true && minecraftVersions?.isCompletedExceptionally == false) return
         minecraftVersions = supplyAsync {
-            URL("$API/minecraft/version")
-                .getJson<CurseForgeMinecraftVersionsResponse>(
-                    headers = requestHeaders(),
-                    useCache = false
-                )?.data ?: error("Failed to fetch Minecraft versions.")
+            fetchMinecraftVersions() ?: error("Failed to fetch Minecraft versions.")
         }
     }
 
@@ -123,7 +134,7 @@ object CurseForgeService : IService {
     private fun fetchCategories() {
         if (categories != null && categories?.isDone == true && categories?.isCompletedExceptionally == false) return
         categories = supplyAsync {
-            URL("$API/categories?gameId=432")
+            URL("$apiUrl/categories?gameId=432")
                 .getJson<CurseForgeCategoryResponse>(
                     headers = requestHeaders(),
                     useCache = false
@@ -154,12 +165,12 @@ object CurseForgeService : IService {
     }
 
     override fun getProjectsFromIds(ids: List<String>): Map<String, IProject> {
-        return URL("$API/mods")
+        return URL("$apiUrl/mods")
             .postAndGetJson<CurseForgeModsBatchResponse, CurseForgeModsBatch>(
                 CurseForgeModsBatch(ids.map { it.toInt() }), headers = requestHeaders()
-            )?.data?.associateBy { project -> ids.first { it == project.getId() } }
+            )?.data?.onEach { it.bindService(this) }
+            ?.associateBy { project -> ids.first { it == project.getId() } }
             ?: error("Failed to fetch mods.")
-
     }
 
     override fun getUpdates(
@@ -178,7 +189,7 @@ object CurseForgeService : IService {
                 MurmurHash2.cfHash(bytes, bytes.size)
             }.filterKeys { it != null }
             val mcVersion = minecraftVersion
-            val result = URL("$API/fingerprints/432")
+            val result = URL("$apiUrl/fingerprints/432")
                 .postAndGetJson<CurseForgeFingerprintResponse, CurseForgeFingerprint>(
                     CurseForgeFingerprint(hashes.keys.map { it!! }.toList()),
                     headers = requestHeaders()
@@ -187,6 +198,10 @@ object CurseForgeService : IService {
                             // If there is no download url, we can't download this project so we ignore it
                             && it.file.hasDownloadUrl()
                 } ?: error("Failed to fetch updates")
+            result.forEach { match ->
+                match.file.bindService(this)
+                match.latestFiles.forEach { it.bindService(this) }
+            }
 
             val fileFutures: MutableMap<CurseForgeFingerprintMatch, CompletableFuture<CurseForgeVersion?>> =
                 mutableMapOf()
@@ -200,13 +215,14 @@ object CurseForgeService : IService {
                 }
                 if (fileCandidate == null && !match.latestFiles.any { it.fileFingerprint == match.file.fileFingerprint }) {
                     fileFutures[match] = supplyAsync {
-                        val builder = URIBuilder("$API/mods/${match.id}/files")
+                        val builder = URIBuilder("$apiUrl/mods/${match.id}/files")
                             // We only care about the most recent match
                             .addParameter("pageSize", "1")
                         if (mcVersion != null) builder.addParameter("gameVersion", mcVersion)
                         builder.build().toURL()
                             .getJson<CurseForgeProject.Versions>(headers = requestHeaders())
-                            ?.data?.sortedByDescending {
+                            ?.data?.onEach { it.bindService(this) }
+                            ?.sortedByDescending {
                                 Instant.from(DateTimeFormatter.ISO_INSTANT.parse(it.getReleaseDate()))
                             }?.firstOrNull {
                                 Instant.from(DateTimeFormatter.ISO_INSTANT.parse(it.getReleaseDate())).isAfter(installedDate)
@@ -247,4 +263,27 @@ object CurseForgeService : IService {
         "11" to "resourcify.browse.sort.newest",
         "3" to "resourcify.browse.sort.updated",
     )
+}
+
+object CurseForgeService : CurseForgeApiService(
+    "CurseForge",
+    "https://api.curseforge.com/v1",
+    "curseforge",
+) {
+    const val API = "https://api.curseforge.com/v1"
+
+    /**
+     * Fallback CurseForge API key used when Config.curseApiToken is empty.
+     */
+    const val API_KEY = "\$2a\$10\$x/7WFjN78HRAg7S6IQQCJeYoJz0/PQNCZIoN7CY3GxwAI6krlRskW"
+
+    override fun requestHeaders(): Map<String, String> {
+        val headers = mutableMapOf(
+            "x-api-key" to (Config.instance.curseApiToken.trim().ifEmpty { API_KEY })
+        )
+        Config.instance.curseUserAgent.trim().takeIf { it.isNotEmpty() }?.let {
+            headers["User-Agent"] = it
+        }
+        return headers
+    }
 }

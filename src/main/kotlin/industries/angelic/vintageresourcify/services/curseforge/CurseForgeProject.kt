@@ -43,6 +43,16 @@ data class CurseForgeProject(
     @Transient
     private var versionsRequest: CompletableFuture<List<CurseForgeVersion>>? = null
 
+    @Transient
+    private var service: CurseForgeApiService? = null
+
+    internal fun bindService(service: CurseForgeApiService): CurseForgeProject {
+        this.service = service
+        return this
+    }
+
+    private fun service(): CurseForgeApiService = service ?: CurseForgeService
+
     override fun getName(): String = name
     override fun getId(): String = id.toString()
     override fun getSummary(): String = summary
@@ -53,9 +63,7 @@ data class CurseForgeProject(
 
     override fun getDescription(): CompletableFuture<String> {
         return descriptionRequest ?: supplyAsync {
-            URL("${CurseForgeService.API}/mods/$id/description")
-                .getJson<Description>(headers = CurseForgeService.requestHeaders())
-                ?.data ?: error("Failed to fetch description.")
+            service().fetchDescription(this) ?: error("Failed to fetch description.")
         }.apply { descriptionRequest = this }
     }
 
@@ -85,9 +93,10 @@ data class CurseForgeProject(
     override fun canBeInstalled(): Boolean = allowModDistribution ?: true
     override fun getVersions(): CompletableFuture<List<IVersion>> {
         return (versionsRequest ?: supplyAsync {
-            URL("${CurseForgeService.API}/mods/$id/files")
-                .getJson<Versions>(headers = CurseForgeService.requestHeaders())
-                ?.data?.filter { it.hasDownloadUrl() } ?: error("Failed to fetch versions.")
+            URL("${service().apiUrl}/mods/$id/files")
+                .getJson<Versions>(headers = service().requestHeaders())
+                ?.data?.onEach { it.bindService(service()) }
+                ?.filter { it.hasDownloadUrl() } ?: error("Failed to fetch versions.")
         }.apply { versionsRequest = this }) as CompletableFuture<List<IVersion>>
     }
 

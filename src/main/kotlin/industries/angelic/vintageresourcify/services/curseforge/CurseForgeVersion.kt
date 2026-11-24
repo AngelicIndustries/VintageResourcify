@@ -43,6 +43,16 @@ data class CurseForgeVersion(
     @Transient
     private var dependenciesRequest: CompletableFuture<List<CurseForgeDependency>>? = null
 
+    @Transient
+    private var service: CurseForgeApiService? = null
+
+    internal fun bindService(service: CurseForgeApiService): CurseForgeVersion {
+        this.service = service
+        return this
+    }
+
+    private fun service(): CurseForgeApiService = service ?: CurseForgeService
+
     override fun getName(): String = displayName
     override fun getVersionNumber(): String? = null
     override fun getProjectId(): String = modId.toString()
@@ -54,9 +64,7 @@ data class CurseForgeVersion(
 
     override fun getChangeLog(): CompletableFuture<String> {
         return changeLogRequest ?: supplyAsync {
-            URL("${CurseForgeService.API}/mods/$modId/files/$id/changelog")
-                .getJson<Changelog>(headers = CurseForgeService.requestHeaders())
-                ?.data ?: error("Failed to fetch changelog.")
+            service().fetchChangelog(modId.toString(), id.toString()) ?: error("Failed to fetch changelog.")
         }.apply { changeLogRequest = this }
     }
 
@@ -86,14 +94,14 @@ data class CurseForgeVersion(
     override fun getDependencies(): CompletableFuture<List<IDependency>> {
         return (dependenciesRequest ?: supplyAsync {
             val deps = dependencies.filter { DependencyType.fromCurseForgeId(it.relationType) != null }
-            val projects: ModsResponse = "${CurseForgeService.API}/mods".toURL()
+            val projects: ModsResponse = "${service().apiUrl}/mods".toURL()
                 ?.postAndGetJson(
                     GetByIdProperty(deps.map { it.modId }),
-                    headers = CurseForgeService.requestHeaders()
+                    headers = service().requestHeaders()
                 ) ?: error("Failed to fetch dependencies.")
             projects.data.map {
                 CurseForgeDependency(
-                    it,
+                    it.bindService(service()),
                     DependencyType.fromCurseForgeId(deps.first { dep -> dep.modId.toString() == it.getId() }.relationType)!!
                 )
             }

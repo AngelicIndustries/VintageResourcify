@@ -301,7 +301,12 @@ tasks.register<Test>("testCurseForgeApi") {
     testClassesDirs = sourceSets.named("test").get().output.classesDirs
     classpath = curseForgeReplacementSourceSet.output + sourceSets.named("test").get().runtimeClasspath
     systemProperty("resourcify.test.curseforge", "true")
-    include("**/ProviderApiTest.class", "**/DownloadManagerTest.class", "**/ModrinthProviderTest.class")
+    include(
+        "**/ProviderApiTest.class",
+        "**/DownloadManagerTest.class",
+        "**/ModrinthProviderTest.class",
+        "**/CurseForgeProviderTest.class",
+    )
 }
 
 tasks.named("check").configure {

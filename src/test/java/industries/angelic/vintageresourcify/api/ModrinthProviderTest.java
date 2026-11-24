@@ -2,22 +2,13 @@ package industries.angelic.vintageresourcify.api;
 
 import static org.junit.Assert.*;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.URI;
 import java.net.URL;
-import java.net.URLConnection;
-import java.net.URLStreamHandler;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.security.cert.Certificate;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
-
-import javax.net.ssl.HttpsURLConnection;
 
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -47,53 +38,7 @@ public class ModrinthProviderTest {
 
     @BeforeClass
     public static void useOfflineResponses() {
-        // This test JVM never needs real HTTPS. Fail on any request to the wrong platform.
-        // DownloadManagerTest supplies its own URL handler and is independent of this factory.
-        URL.setURLStreamHandlerFactory(protocol -> "https".equals(protocol) ? new URLStreamHandler() {
-
-            @Override
-            protected URLConnection openConnection(URL url) {
-                assertEquals("127.0.0.2", url.getHost());
-                return new HttpsURLConnection(url) {
-
-                    @Override
-                    public InputStream getInputStream() {
-                        return new ByteArrayInputStream(response(url).getBytes(StandardCharsets.UTF_8));
-                    }
-
-                    @Override
-                    public OutputStream getOutputStream() {
-                        return new ByteArrayOutputStream();
-                    }
-
-                    @Override
-                    public String getCipherSuite() {
-                        return "test";
-                    }
-
-                    @Override
-                    public Certificate[] getLocalCertificates() {
-                        return new Certificate[0];
-                    }
-
-                    @Override
-                    public Certificate[] getServerCertificates() {
-                        return new Certificate[0];
-                    }
-
-                    @Override
-                    public void connect() {}
-
-                    @Override
-                    public void disconnect() {}
-
-                    @Override
-                    public boolean usingProxy() {
-                        return false;
-                    }
-                };
-            }
-        } : null);
+        OfflineHttps.route("127.0.0.2", (url, body, connection) -> response(url));
     }
 
     private static String response(URL url) {
